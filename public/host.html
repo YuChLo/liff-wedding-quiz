@@ -1,0 +1,175 @@
+<!doctype html><html lang="zh-Hant"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>婚禮問答 Host</title>
+<style>
+body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+.card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
+input,button,textarea{font-size:16px} input,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
+button{padding:12px 14px;border-radius:12px;border:0;font-weight:900}
+.primary{background:#22c55e;color:#06101f}.secondary{background:#3b82f6;color:#fff}.danger{background:#ef4444;color:#fff}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.col{flex:1;min-width:260px}
+.big{font-size:22px;font-weight:900}.muted{opacity:.75}
+code{background:#0f1626;border:1px solid #2a3b66;border-radius:10px;padding:4px 8px;display:inline-block}
+table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #223055;text-align:left}
+</style></head><body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between"><div class="big">主持台</div><div class="muted" id="conn">連線中…</div></div>
+
+  <div class="card">
+    <div class="row">
+      <div class="col"><div class="muted">ADMIN_KEY</div><input id="adminKey" placeholder="填 .env 的 ADMIN_KEY"/></div>
+      <div class="col"><div class="muted">主持人名稱</div><input id="hostName" placeholder="可留空"/></div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="row">
+      <button class="secondary" id="createBtn">建立房間</button>
+      <input id="joinCode" placeholder="房間碼（重連用）" style="max-width:240px"/>
+      <button class="secondary" id="joinBtn">加入房間</button>
+    </div>
+    <p class="muted" id="hint"></p>
+  </div>
+
+  <div class="card" id="roomCard" style="display:none">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <div class="muted">房間碼</div><div class="big" id="code">—</div>
+        <div class="muted">玩家加入頁</div><code id="joinUrl">—</code>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">回覆數</div><div class="big" id="answers">0</div>
+        <div class="muted">狀態</div><div class="big" id="state">—</div>
+      </div>
+    </div>
+    <hr style="border:0;border-top:1px solid #223055;margin:14px 0"/>
+    <div class="row">
+      <button class="secondary" id="startBtn">開始（15s）</button>
+      <button class="danger" id="revealBtn">提前揭曉</button>
+      <button class="primary" id="nextBtn">下一題</button>
+      <a id="display" href="#" target="_blank" class="muted">開投影頁</a>
+    </div>
+    <div style="height:12px"></div>
+    <div class="muted" id="progress">—</div>
+    <div class="big" id="q">—</div>
+    <div class="muted" id="choices">—</div>
+
+    <div style="height:16px"></div>
+    <div class="row">
+      <div class="col">
+        <div class="big">排行榜（前10）</div>
+        <table><thead><tr><th>#</th><th>玩家</th><th>分數</th><th>連線</th></tr></thead><tbody id="lb"></tbody></table>
+      </div>
+      <div class="col">
+        <div class="big">自訂題庫 JSON</div>
+        <div class="muted">格式：[{ "text":"題目","choices":["A","B","C","D"],"correctIndex":0 }]</div>
+        <textarea id="qJson" rows="10"></textarea>
+        <div style="height:10px"></div>
+        <button class="secondary" id="setQBtn">套用題庫</button>
+        <div class="muted" id="qHint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let socket, roomCode="", baseUrl="", adminKey="", liffName="";
+function setConn(ok){$("conn").textContent=ok?"已連線":"未連線";}
+async function cfg(){const r=await fetch("/config?role=host"); return r.json();}
+async function initLiff(liffId){
+  try{
+    await liff.init({ liffId });
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    const p=await liff.getProfile();
+    liffName=p.displayName||"";
+  }catch(e){}
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function update(s){
+  roomCode=s.code;
+  $("roomCard").style.display="";
+  $("code").textContent=s.code;
+  $("state").textContent=s.state;
+  $("answers").textContent=s.answersCount||0;
+
+  const origin = baseUrl || location.origin;
+  $("joinUrl").textContent = origin + "/player.html";
+  $("display").href = origin + "/display.html?code=" + encodeURIComponent(s.code);
+
+  $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
+  if(s.question){
+    $("q").textContent=s.question.text;
+    const c=s.question.choices;
+    $("choices").textContent = "A " + c[0] + " | B " + c[1] + " | C " + c[2] + " | D " + c[3];
+  } else { $("q").textContent="—"; $("choices").textContent="—"; }
+
+  const lb=$("lb"); lb.innerHTML="";
+  (s.players||[]).slice(0,10).forEach((p,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = "<td>" + (i+1) + "</td><td>" + esc(p.name) + "</td><td>" + p.score + "</td><td>" + (p.connected ? "🟢" : "⚪") + "</td>";
+    lb.appendChild(tr);
+  });
+}
+
+function sampleQs(){
+  return [
+    {"text":"新郎第一次見到新娘，心裡想？","choices":["天啊好漂亮","她很酷","她很兇","先吃再說"],"correctIndex":0},
+    {"text":"兩人最常一起做的事？","choices":["追劇","運動","打電動","散步"],"correctIndex":0}
+  ];
+}
+
+(async ()=>{
+  const c = await cfg();
+  baseUrl = c.baseUrl || "";
+  await initLiff(c.liffId||"");
+  if(liffName && !$("hostName").value) $("hostName").value=liffName;
+
+  socket=io();
+  socket.on("connect",()=>setConn(true));
+  socket.on("disconnect",()=>setConn(false));
+  socket.on("room:update",(snap)=>{ if(roomCode && snap.code!==roomCode) return; update(snap); });
+  socket.on("room:answersCount",(p)=>{ $("answers").textContent=p.answersCount||$("answers").textContent; });
+
+  $("qJson").value = JSON.stringify(sampleQs(), null, 2);
+
+  $("createBtn").onclick=()=>{
+    adminKey=$("adminKey").value.trim();
+    const hostName=$("hostName").value.trim()||"Host";
+    $("hint").textContent="建立中…";
+    socket.emit("host:create",{adminKey,hostName},(res)=>{
+      if(!(res && res.ok)){ $("hint").textContent="失敗："+(res.error||""); return; }
+      $("hint").textContent="✅ 已建立";
+      update(res.room);
+    });
+  };
+
+  $("joinBtn").onclick=()=>{
+    adminKey=$("adminKey").value.trim();
+    const code=$("joinCode").value.trim().toUpperCase();
+    const hostName=$("hostName").value.trim()||"Host";
+    $("hint").textContent="加入中…";
+    socket.emit("host:join",{adminKey,code,hostName},(res)=>{
+      if(!(res && res.ok)){ $("hint").textContent="失敗："+(res.error||""); return; }
+      $("hint").textContent="✅ 已加入";
+      update(res.room);
+    });
+  };
+
+  $("startBtn").onclick=()=> socket.emit("host:start",{adminKey,code:roomCode,durationMs:15000},(r)=>{ if(!(r && r.ok)) alert(r.error||"失敗"); });
+  $("revealBtn").onclick=()=> socket.emit("host:reveal",{adminKey,code:roomCode},(r)=>{ if(!(r && r.ok)) alert(r.error||"失敗"); });
+  $("nextBtn").onclick=()=> socket.emit("host:next",{adminKey,code:roomCode},(r)=>{ if(!(r && r.ok)) alert(r.error||"失敗"); });
+
+  $("setQBtn").onclick=()=>{
+    try{
+      const qs=JSON.parse($("qJson").value);
+      $("qHint").textContent="套用中…";
+      socket.emit("host:setQuestions",{adminKey,code:roomCode,questions:qs},(r)=>{
+        $("qHint").textContent = (r && r.ok) ? "✅ 已套用" : ("失敗："+((r && r.error)||""));
+      });
+    }catch(e){ $("qHint").textContent="JSON 格式錯誤"; }
+  };
+})();
+</script></body></html>
