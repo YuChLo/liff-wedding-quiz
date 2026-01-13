@@ -28,8 +28,10 @@
 
     <div class="card" id="joinCard">
       <div class="big">加入房間</div>
-      <p class="muted" id="hint">將自動使用 LINE 名稱與頭像</p>
+      <p class="muted" id="hint">請輸入工號（僅數字 4~10 碼）</p>
       <input id="code" placeholder="ABC123"/>
+      <div style="height:10px"></div>
+      <input id="emp" placeholder="請輸入工號（4~10 碼數字）" inputmode="numeric" pattern="[0-9]*"/>
       <div style="height:10px"></div>
       <button id="joinBtn">加入</button>
     </div>
@@ -57,7 +59,6 @@
     </div>
   </div>
 
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script>
   (function () {
@@ -75,77 +76,12 @@
 
     var roomCode = "";
     var userId = "";
-    var displayName = "";
-    var avatarUrl = "";
-
     var state = "lobby";
     var startAt = 0;
     var durationMs = 0;
     var answered = false;
     var correctIndex = null;
     var currentChoices = [];
-
-    function cfg(cb){
-      fetch("/config?role=player")
-        .then(function(r){ return r.json(); })
-        .then(function(j){ cb(null, j); })
-        .catch(function(e){ cb(e); });
-    }
-
-    function initLiff(liffId, done){
-      // Allow browser testing
-      if (!window.liff || !liffId){
-        userId = "guest-" + Math.random().toString(16).slice(2);
-        displayName = "Guest";
-        avatarUrl = "";
-        $("hint").textContent = "⚠️ 不是在 LINE LIFF 或未設定 LIFF_ID，已用訪客模式（仍可測試）";
-        return done();
-      }
-
-      liff.init({ liffId: liffId }).then(function(){
-        if (!liff.isLoggedIn()){
-          liff.login();
-          return;
-        }
-        return liff.getProfile().then(function(p){
-          userId = p.userId;
-          displayName = p.displayName || "Guest";
-          avatarUrl = p.pictureUrl || "";
-          done();
-        }).catch(function(){
-          userId = "guest-" + Math.random().toString(16).slice(2);
-          displayName = "Guest";
-          avatarUrl = "";
-          $("hint").textContent = "⚠️ 取得 LINE 個人資料失敗，已用訪客模式";
-          done();
-        });
-      }).catch(function(){
-        userId = "guest-" + Math.random().toString(16).slice(2);
-        displayName = "Guest";
-        avatarUrl = "";
-        $("hint").textContent = "⚠️ LIFF init 失敗，已用訪客模式";
-        done();
-      });
-    }
-
-    function renderChoices(){
-      var wrap = $("choices");
-      wrap.innerHTML = "";
-      var labels = ["A","B","C","D"];
-
-      for (var i=0;i<currentChoices.length;i++){
-        (function(idx){
-          var c = currentChoices[idx];
-          var b = document.createElement("button");
-          b.className = "choice";
-          b.disabled = (state !== "question") || answered;
-          b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
-                      + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
-          b.onclick = function(){ sendAns(idx); };
-          wrap.appendChild(b);
-        })(i);
-      }
-    }
 
     function onUpdate(s){
       roomCode = s.code;
@@ -171,23 +107,55 @@
       if (state === "ended"){ $("status").textContent = "🎉 結束！"; }
     }
 
+    function renderChoices(){
+      var wrap = $("choices");
+      wrap.innerHTML = "";
+      var labels = ["A","B","C","D"];
+
+      for (var i=0;i<currentChoices.length;i++){
+        (function(idx){
+          var c = currentChoices[idx];
+          var b = document.createElement("button");
+          b.className = "choice";
+          b.disabled = (state !== "question") || answered;
+          b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
+                      + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
+          b.onclick = function(){ sendAns(idx); };
+          wrap.appendChild(b);
+        })(i);
+      }
+    }
+
+    function validateEmp(emp){
+      if (!/^[0-9]+$/.test(emp)) return "工號只能輸入數字（不可英文/符號）";
+      if (emp.length < 4 || emp.length > 10) return "工號長度需 4~10 碼";
+      return "";
+    }
+
     function joinRoom(){
       var code = ($("code").value || "").trim().toUpperCase();
-      if (!code){ $("hint").textContent = "請輸入房間碼"; return; }
-      $("hint").textContent = "加入中…";
+      var emp  = ($("emp").value  || "").trim();
+
+      if(!code){ $("hint").textContent="請輸入房間碼"; return; }
+
+      var msg = validateEmp(emp);
+      if (msg){ $("hint").textContent = msg; return; }
+
+      $("hint").textContent="加入中…";
+
+      userId = "emp-" + emp;
 
       socket.emit("player:join", {
         code: code,
         userId: userId,
-        name: (displayName || "Guest"),
-        avatarUrl: avatarUrl
+        name: emp
       }, function(res){
-        if (!(res && res.ok)){
-          $("hint").textContent = "加入失敗：" + ((res && res.error) || "");
+        if(!(res && res.ok)){
+          $("hint").textContent="加入失敗：" + ((res && res.error) || "");
           return;
         }
-        $("joinCard").style.display = "none";
-        $("gameCard").style.display = "";
+        $("joinCard").style.display="none";
+        $("gameCard").style.display="";
         onUpdate(res.room);
       });
     }
@@ -203,29 +171,19 @@
       renderChoices();
     }
 
-    // timer
     setInterval(function(){
       if (state !== "question"){ $("timer").textContent = "—"; return; }
       var remain = Math.max(0, (startAt + durationMs) - Date.now());
       $("timer").textContent = Math.ceil(remain/1000) + "s";
     }, 200);
 
-    function boot(config){
+    function boot(){
       socket = io();
 
       var urlCode = (params.get("code") || "").trim().toUpperCase();
       if (urlCode) $("code").value = urlCode;
 
-      var autoJoined = false;
-
-      socket.on("connect", function(){
-        setConn(true);
-        if (urlCode && !autoJoined){
-          autoJoined = true;
-          joinRoom();
-        }
-      });
-
+      socket.on("connect", function(){ setConn(true); });
       socket.on("disconnect", function(){ setConn(false); });
       socket.on("room:update", onUpdate);
 
@@ -241,14 +199,14 @@
       });
 
       $("joinBtn").onclick = joinRoom;
+      $("emp").addEventListener("keydown", function(e){
+        if (e.key === "Enter") joinRoom();
+      });
     }
 
-    // start
-    cfg(function(err, c){
-      if (err){ $("hint").textContent = "⚠️ 讀取設定失敗"; return; }
-      initLiff(c.liffId || "", function(){ boot(c); });
-    });
+    boot();
   })();
   </script>
+
 </body>
 </html>

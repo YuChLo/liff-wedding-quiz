@@ -44,3 +44,8 @@ npm start
 ## Clean版（修正 player.html 結構）
 - player.html 已整理：一鍵進房、LINE 名稱/頭像、自動重連顯示、無多餘括號。
 - QR 頁：/qr.html?code=房間碼
+
+
+## 玩家登入方式（工號）
+- 玩家需輸入工號（僅數字 4~10 碼），不再使用 LINE 名稱/頭像。
+- 玩家連結仍可用：`/player.html?code=房間碼`

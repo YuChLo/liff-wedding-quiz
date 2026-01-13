@@ -183,6 +183,14 @@ io.on("connection", (socket)=>{
     const userId = String(p?.userId||"");
     if (!userId) return cb?.({ok:false,error:"Missing userId"});
     const name = safeName(p?.name);
+    // Employee ID validation (digits only, length 4~10)
+    if (!/^[0-9]+$/.test(name)) {
+      return cb({ ok:false, error:"工號只能輸入數字（不可英文/符號）" });
+    }
+    if (name.length < 4 || name.length > 10) {
+      return cb({ ok:false, error:"工號長度需 4~10 碼" });
+    }
+
     socket.join("room:"+code);
 
     const existing = room.players.get(userId);
