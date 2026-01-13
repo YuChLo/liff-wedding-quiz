@@ -53,7 +53,7 @@ let state="lobby", startAt=0, durationMs=0, correctIndex=null;
 
 const socket=io();
 socket.on("connect", ()=>{
-  if(roomCode) socket.emit("player:join",{code:roomCode,userId:"display-"+Math.random().toString(16).slice(2),name:"Display"},()=>{});
+  if(roomCode) socket.emit("display:join",{ code: roomCode },()=>{});
 });
 socket.on("room:update",(s)=>{
   if(s.code!==roomCode) return;

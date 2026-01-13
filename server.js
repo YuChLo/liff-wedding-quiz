@@ -205,6 +205,16 @@ io.on("connection", (socket)=>{
     broadcast(room);
   });
 
+  // Display/observer join (not a player, won't appear in leaderboard)
+  socket.on("display:join", ({ code }, cb) => {
+    const room = rooms.get((code||"").toString().trim().toUpperCase());
+    if (!room) return cb && cb({ ok:false, error:"Room not found" });
+    socket.join(room.code);
+    socket.emit("room:update", snapshot(room));
+    cb && cb({ ok:true });
+  });
+
+
   socket.on("player:answer", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
