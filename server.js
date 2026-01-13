@@ -38,7 +38,7 @@ function defaultQuestions(){
 }
 
 function snapshot(room){
-  const playersCount = [...room.players.values()].filter(p=>p.connected).length;
+  const playersCount = room.players ? room.players.size : 0;
 
   const players = Array.from(room.players.values())
     .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
@@ -240,7 +240,7 @@ const correct = q.correctIndex;
 
   socket.on("disconnect", ()=>{
     // broadcastUpdatesOnDisconnect
-    try { rooms.forEach(r=> io.to(r.code).emit("room:update", snapshot(r))); } catch(e) {}
+    try { rooms.forEach(r => io.to(r.code).emit("room:update", snapshot(r))); } catch(e) {}
 try {
       rooms.forEach(room=>{ io.to(room.code).emit("room:update", snapshot(room)); });
     } catch(e){}
