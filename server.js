@@ -239,7 +239,9 @@ const correct = q.correctIndex;
   });
 
   socket.on("disconnect", ()=>{
-    try {
+    // broadcastUpdatesOnDisconnect
+    try { rooms.forEach(r=> io.to(r.code).emit("room:update", snapshot(r))); } catch(e) {}
+try {
       rooms.forEach(room=>{ io.to(room.code).emit("room:update", snapshot(room)); });
     } catch(e){}
 

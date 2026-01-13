@@ -36,6 +36,10 @@ th,td{padding:10px;border-bottom:1px solid #223055;text-align:left}
       <table><thead><tr><th>#</th><th>玩家</th><th>分數</th></tr></thead><tbody id="lb"></tbody></table>
     </div>
     <div class="col card">
+      <div class="big" style="font-size:32px">目前人數</div>
+      <div class="big" id="players" style="font-size:64px">0</div>
+    </div>
+    <div class="col card">
       <div class="big" style="font-size:32px">回覆數</div>
       <div class="big" id="answers" style="font-size:64px">0</div>
     </div>
@@ -56,9 +60,10 @@ socket.on("connect", ()=>{
   if(roomCode) socket.emit("display:join",{ code: roomCode },()=>{});
 });
 socket.on("room:update",(s)=>{
-  if(s.code!==roomCode) return;
+  if(roomCode && s.code && s.code!==roomCode) return;
   state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0; correctIndex=null;
   $("answers").textContent=s.answersCount||0;
+  if (typeof s.playersCount === "number") $("players").textContent = s.playersCount;
   $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
   $("state").textContent = state==="question"?"答題中":(state==="reveal"?"揭曉":(state==="ended"?"結束":"等待"));
   if(s.question){
