@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>婚禮問答 Player</title>
   <style>
+    *,*::before,*::after{box-sizing:border-box}
+
     body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
     .wrap{max-width:720px;margin:0 auto;padding:16px}
     .card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
@@ -17,6 +19,8 @@
     .big{font-size:22px;font-weight:900}
     .muted{opacity:.75}
     .grid{display:grid;gap:10px}
+    input.readonly{opacity:.85}
+
   </style>
 </head>
 <body>
@@ -86,6 +90,18 @@
     function onUpdate(s){
       roomCode = s.code;
       state = s.state;
+
+      // Hide question until host starts (lobby)
+      if (state === "lobby" || !s.question) {
+        const qEl = document.getElementById("q");
+        if (qEl) qEl.textContent = "等待主持人按「下一題」開始…";
+        const choicesEl = document.getElementById("choices");
+        if (choicesEl) choicesEl.innerHTML = "";
+        const progEl = document.getElementById("progress");
+        if (progEl) progEl.textContent = "等待開始";
+        const stEl = document.getElementById("status");
+        if (stEl) stEl.textContent = "等待主持人開始…";
+      }
       startAt = s.startAt || 0;
       durationMs = s.durationMs || 0;
 
@@ -181,7 +197,11 @@
       socket = io();
 
       var urlCode = (params.get("code") || "").trim().toUpperCase();
-      if (urlCode) $("code").value = urlCode;
+      if (urlCode) {
+        $("code").value = urlCode;
+        $("code").readOnly = true;
+        $("code").classList.add("readonly");
+      }
 
       socket.on("connect", function(){ setConn(true); });
       socket.on("disconnect", function(){ setConn(false); });

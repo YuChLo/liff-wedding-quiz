@@ -38,11 +38,14 @@ function defaultQuestions(){
 }
 
 function snapshot(room){
+  const playersCount = [...room.players.values()].filter(p=>p.connected).length;
+
   const players = Array.from(room.players.values())
     .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
     .sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
   const q = room.questions[room.qIndex] || null;
   return {
+    playersCount,
     code: room.code,
     state: room.state,
     qIndex: room.qIndex,
@@ -74,7 +77,7 @@ io.on("connection", (socket)=>{
       code,
       hostSocket: socket.id,
       state:"lobby",
-      qIndex:0,
+      qIndex:-1,
       startAt:0,
       durationMs:15000,
       questions: defaultQuestions(),
@@ -139,8 +142,11 @@ io.on("connection", (socket)=>{
   function reveal(code){
     const room = rooms.get(code);
     if (!room || room.state!=="question") return;
-    const q = room.questions[room.qIndex];
-    const correct = q.correctIndex;
+    let q = null;
+  if (room.state !== "lobby" && room.qIndex >= 0) {
+    q = room.questions[room.qIndex];
+  }
+const correct = q.correctIndex;
     for (const [uid, ans] of room.answers.entries()){
       const player = room.players.get(uid);
       if (!player) continue;
@@ -233,6 +239,10 @@ io.on("connection", (socket)=>{
   });
 
   socket.on("disconnect", ()=>{
+    try {
+      rooms.forEach(room=>{ io.to(room.code).emit("room:update", snapshot(room)); });
+    } catch(e){}
+
     for (const room of rooms.values()){
       for (const pl of room.players.values()){
         if (pl.socketId === socket.id) pl.connected = false;

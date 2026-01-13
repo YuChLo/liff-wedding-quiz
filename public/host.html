@@ -2,6 +2,8 @@
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>婚禮問答 Host</title>
 <style>
+    *,*::before,*::after{box-sizing:border-box}
+
 body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
 .wrap{max-width:980px;margin:0 auto;padding:16px}
 .card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
@@ -14,6 +16,11 @@ button{padding:12px 14px;border-radius:12px;border:0;font-weight:900}
 code{background:#0f1626;border:1px solid #2a3b66;border-radius:10px;padding:4px 8px;display:inline-block}
 table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #223055;text-align:left}
 .avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;background:#0f1626;border:1px solid #2a3b66}
+
+    input,button,select{max-width:100%}
+    .row{min-width:0}
+    .row > *{min-width:0}
+
 </style></head><body>
 <div class="wrap">
   <div class="row" style="justify-content:space-between"><div class="big">主持台</div><div class="muted" id="conn">連線中…</div></div>
