@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>加入房間 QR Code</title>
+  <style>
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;margin:0;background:#050814;color:#eaf0ff}
+    .wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;box-sizing:border-box}
+    .code{font-size:56px;font-weight:900;letter-spacing:4px}
+    .muted{opacity:.75;font-size:18px;text-align:center;max-width:900px}
+    .card{background:#0b1020;border:1px solid #223055;border-radius:24px;padding:22px}
+    #qrcode{display:flex;align-items:center;justify-content:center}
+    .hint{font-size:16px;opacity:.7}
+    .url{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:16px;word-break:break-all;opacity:.9;text-align:center;max-width:1100px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="muted">請用 LINE 掃描加入（或用手機相機掃）</div>
+    <div class="code" id="roomCode">—</div>
+
+    <div class="card">
+      <div id="qrcode"></div>
+    </div>
+
+    <div class="muted">加入連結</div>
+    <div class="url" id="joinUrl">—</div>
+    <div class="hint">（這頁只顯示 QR code，適合現場投影）</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const code = (params.get("code") || "").trim().toUpperCase();
+
+    const origin = location.origin;
+    const joinUrl = origin + "/player.html?code=" + encodeURIComponent(code);
+
+    document.getElementById("roomCode").textContent = code || "（請加 ?code=房間碼）";
+    document.getElementById("joinUrl").textContent = code ? joinUrl : "—";
+
+    if (code) {
+      new QRCode(document.getElementById("qrcode"), {
+        text: joinUrl,
+        width: 420,
+        height: 420,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+  </script>
+</body>
+</html>
