@@ -59,6 +59,7 @@ socket.on("connect", ()=>{
 });
 socket.on("room:update",(s)=>{
   if(s.code!==roomCode) return;
+  if (typeof s.playersCount === "number") { $("players").textContent = s.playersCount; }
   state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0; correctIndex=null;
   $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
   $("state").textContent = state==="question"?"答題中":(state==="reveal"?"揭曉":(state==="ended"?"結束":"等待"));
