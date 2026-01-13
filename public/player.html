@@ -1,148 +1,254 @@
-<!doctype html><html lang="zh-Hant"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>婚禮問答 Player</title>
-<style>
-body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
-.wrap{max-width:720px;margin:0 auto;padding:16px}
-.card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
-input,button{font-size:16px} input{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
-button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;color:#fff;font-weight:800}
-.choice{width:100%;text-align:left;background:#0f1626;border:2px solid #2a3b66;border-radius:14px;padding:14px}
-.good{border-color:#22c55e}.bad{border-color:#ef4444}
-.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.big{font-size:22px;font-weight:900}.muted{opacity:.75}
-.grid{display:grid;gap:10px}
-</style></head><body>
-<div class="wrap">
-  <div class="row"><div class="big">婚禮問答</div><div class="muted" id="conn">連線中…</div></div>
-
-  <div class="card" id="joinCard">
-    <div class="big">加入房間</div>
-    <p class="muted" id="hint">請輸入房間碼（暱稱會自動使用 LINE 名稱）</p>
-    <input id="code" placeholder="ABC123"/>
-    <div style="height:8px"></div>
-<div style="height:10px"></div>
-    <button id="joinBtn">加入</button>
-  </div>
-
-  <div class="card" id="gameCard" style="display:none">
-    <div class="row"><div><div class="muted">房間</div><div class="big" id="room">—</div></div>
-      <div style="text-align:right"><div class="muted">倒數</div><div class="big" id="timer">—</div></div>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>婚禮問答 Player</title>
+  <style>
+    body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
+    .wrap{max-width:720px;margin:0 auto;padding:16px}
+    .card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
+    input,button{font-size:16px}
+    input{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
+    button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;color:#fff;font-weight:800}
+    .choice{width:100%;text-align:left;background:#0f1626;border:2px solid #2a3b66;border-radius:14px;padding:14px}
+    .good{border-color:#22c55e}.bad{border-color:#ef4444}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .big{font-size:22px;font-weight:900}
+    .muted{opacity:.75}
+    .grid{display:grid;gap:10px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <div class="big">婚禮問答</div>
+      <div class="muted" id="conn">連線中…</div>
     </div>
-    <hr style="border:0;border-top:1px solid #223055;margin:14px 0"/>
-    <div class="muted" id="progress">—</div>
-    <div class="big" id="q">等待題目…</div>
-    <div style="height:12px"></div>
-    <div class="grid" id="choices"></div>
-    <div style="height:12px"></div>
-    <div class="muted" id="status">等待主持人開始…</div>
+
+    <div class="card" id="joinCard">
+      <div class="big">加入房間</div>
+      <p class="muted" id="hint">將自動使用 LINE 名稱與頭像</p>
+      <input id="code" placeholder="ABC123"/>
+      <div style="height:10px"></div>
+      <button id="joinBtn">加入</button>
+    </div>
+
+    <div class="card" id="gameCard" style="display:none">
+      <div class="row">
+        <div>
+          <div class="muted">房間</div>
+          <div class="big" id="room">—</div>
+        </div>
+        <div style="text-align:right">
+          <div class="muted">倒數</div>
+          <div class="big" id="timer">—</div>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #223055;margin:14px 0"/>
+
+      <div class="muted" id="progress">—</div>
+      <div class="big" id="q">等待題目…</div>
+      <div style="height:12px"></div>
+      <div class="grid" id="choices"></div>
+      <div style="height:12px"></div>
+      <div class="muted" id="status">等待主持人開始…</div>
+    </div>
   </div>
-</div>
 
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="/socket.io/socket.io.js"></script>
-<script>
-const $=id=>document.getElementById(id);
-const params=new URLSearchParams(location.search);
-let socket, roomCode="", userId="", displayName="", avatarUrl="";
-let state="lobby", startAt=0, durationMs=0, answered=false, correctIndex=null, currentChoices=[];
-function setConn(ok){$("conn").textContent = ok?"已連線":"未連線";}
-async function cfg(){const r=await fetch("/config?role=player"); return r.json();}
-async function initLiff(liffId){
-  try{
-    await liff.init({ liffId });
-    if(!liff.isLoggedIn()){ liff.login(); return; }
-    const p=await liff.getProfile();
-    userId=p.userId; displayName=p.displayName||"";
-    avatarUrl=p.pictureUrl||"";
-  }catch(e){
-    userId="guest-"+Math.random().toString(16).slice(2);
-    avatarUrl="";
-    $("hint").textContent="⚠️ 似乎不是在 LINE LIFF，已用訪客模式（仍可測試）";
-  }
-}
-function renderChoices(){
-  const wrap=$("choices"); wrap.innerHTML="";
-  const labels=["A","B","C","D"];
-  currentChoices.forEach((c,i)=>{
-    const b=document.createElement("button");
-    b.className="choice";
-    b.disabled = (state!=="question") || answered;
-    b.innerHTML = '<div class="muted">' + labels[i] + '</div><div style="font-size:18px;font-weight:900">' + esc(c) + "</div>";
-    b.onclick=()=>sendAns(i);
-    wrap.appendChild(b);
-  });
-}
-function esc(s){return String(s).replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
-function onUpdate(s){
-  roomCode=s.code; state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0;
-  $("room").textContent=s.code;
-  $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
-  if(s.question){ $("q").textContent=s.question.text; currentChoices=s.question.choices||[]; renderChoices(); }
-  else { $("q").textContent="等待題目…"; $("choices").innerHTML=""; }
-  if(state==="lobby"){ answered=false; correctIndex=null; $("status").textContent="等待主持人開始…"; }
-  if(state==="question"){ answered=false; correctIndex=null; $("status").textContent="請選擇答案！"; }
-  if(state==="reveal"){ $("status").textContent="揭曉！"; }
-  if(state==="ended"){ $("status").textContent="🎉 結束！"; }
-}
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  (function () {
+    function $(id){ return document.getElementById(id); }
+    function setConn(ok){ $("conn").textContent = ok ? "已連線" : "未連線"; }
 
-function joinRoom(){
-    const code=$("code").value.trim().toUpperCase();
-    const name=(displayName||"Guest");
-    if(!code){ $("hint").textContent="請輸入房間碼"; return false; }
-    $("hint").textContent="加入中…";
-    socket.emit("player:join",{code,userId,name,avatarUrl},(res)=>{
-      if(!res?.ok){ $("hint").textContent="加入失敗："+(res.error||""); return; }
-      $("joinCard").style.display="none"; $("gameCard").style.display="";
-      onUpdate(res.room);
-    });
-    return true;
-}
-
-function sendAns(i){
-  if(answered||state!=="question") return;
-  answered=true; $("status").textContent="✅ 已送出，等待揭曉…";
-  socket.emit("player:answer",{code:roomCode,userId,choiceIndex:i},(res)=>{ if(!(res && res.ok)) $("status").textContent="⚠️ "+(res.error||"送出失敗"); });
-  renderChoices();
-}
-setInterval(()=>{
-  if(state!=="question"){ $("timer").textContent="—"; return; }
-  const remain=Math.max(0,(startAt+durationMs)-Date.now());
-  $("timer").textContent=Math.ceil(remain/1000)+"s";
-},200);
-
-(async ()=>{
-  const c = await cfg();
-  await initLiff(c.liffId||"");
-  socket=io();
-
-  // One-click join: if URL has ?code=XXXX, auto join after socket connects.
-  const urlCodeAuto = (params.get("code")||"").trim().toUpperCase();
-  let autoJoined = false;
-  if (urlCodeAuto) $("code").value = urlCodeAuto;
-
-  socket.on("connect", ()=>{
-    if (urlCodeAuto && !autoJoined){
-      autoJoined = true;
-      joinRoom();
+    function esc(s){
+      return String(s).replace(/[&<>"']/g, function(m){
+        return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[m];
+      });
     }
-  });
 
-    setConn(true);
-  });
-  socket.on("disconnect",()=>setConn(false));
-  socket.on("room:update",onUpdate);
-  socket.on("question:reveal",(p)=>{
-    correctIndex=p.correctIndex;
-    // mark correct on UI
-    const nodes=[...document.querySelectorAll(".choice")];
-    nodes.forEach((n,idx)=>{ n.classList.remove("good","bad"); if(idx===correctIndex) n.classList.add("good"); else if(answered) n.classList.add("bad"); n.disabled=true; });
-  });
+    var params = new URLSearchParams(location.search);
+    var socket = null;
 
-  // auto-fill room code from URL (?code=XXXX)
-  const urlCode = (params.get("code")||"").trim().toUpperCase();
-  if (urlCode) $("code").value = urlCode;
+    var roomCode = "";
+    var userId = "";
+    var displayName = "";
+    var avatarUrl = "";
 
-  $("joinBtn").onclick=()=>joinRoom();
-})();
-</script></body></html>
+    var state = "lobby";
+    var startAt = 0;
+    var durationMs = 0;
+    var answered = false;
+    var correctIndex = null;
+    var currentChoices = [];
+
+    function cfg(cb){
+      fetch("/config?role=player")
+        .then(function(r){ return r.json(); })
+        .then(function(j){ cb(null, j); })
+        .catch(function(e){ cb(e); });
+    }
+
+    function initLiff(liffId, done){
+      // Allow browser testing
+      if (!window.liff || !liffId){
+        userId = "guest-" + Math.random().toString(16).slice(2);
+        displayName = "Guest";
+        avatarUrl = "";
+        $("hint").textContent = "⚠️ 不是在 LINE LIFF 或未設定 LIFF_ID，已用訪客模式（仍可測試）";
+        return done();
+      }
+
+      liff.init({ liffId: liffId }).then(function(){
+        if (!liff.isLoggedIn()){
+          liff.login();
+          return;
+        }
+        return liff.getProfile().then(function(p){
+          userId = p.userId;
+          displayName = p.displayName || "Guest";
+          avatarUrl = p.pictureUrl || "";
+          done();
+        }).catch(function(){
+          userId = "guest-" + Math.random().toString(16).slice(2);
+          displayName = "Guest";
+          avatarUrl = "";
+          $("hint").textContent = "⚠️ 取得 LINE 個人資料失敗，已用訪客模式";
+          done();
+        });
+      }).catch(function(){
+        userId = "guest-" + Math.random().toString(16).slice(2);
+        displayName = "Guest";
+        avatarUrl = "";
+        $("hint").textContent = "⚠️ LIFF init 失敗，已用訪客模式";
+        done();
+      });
+    }
+
+    function renderChoices(){
+      var wrap = $("choices");
+      wrap.innerHTML = "";
+      var labels = ["A","B","C","D"];
+
+      for (var i=0;i<currentChoices.length;i++){
+        (function(idx){
+          var c = currentChoices[idx];
+          var b = document.createElement("button");
+          b.className = "choice";
+          b.disabled = (state !== "question") || answered;
+          b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
+                      + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
+          b.onclick = function(){ sendAns(idx); };
+          wrap.appendChild(b);
+        })(i);
+      }
+    }
+
+    function onUpdate(s){
+      roomCode = s.code;
+      state = s.state;
+      startAt = s.startAt || 0;
+      durationMs = s.durationMs || 0;
+
+      $("room").textContent = s.code;
+      $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
+
+      if (s.question){
+        $("q").textContent = s.question.text;
+        currentChoices = s.question.choices || [];
+        renderChoices();
+      } else {
+        $("q").textContent = "等待題目…";
+        $("choices").innerHTML = "";
+      }
+
+      if (state === "lobby"){ answered = false; correctIndex = null; $("status").textContent = "等待主持人開始…"; }
+      if (state === "question"){ answered = false; correctIndex = null; $("status").textContent = "請選擇答案！"; }
+      if (state === "reveal"){ $("status").textContent = "揭曉！"; }
+      if (state === "ended"){ $("status").textContent = "🎉 結束！"; }
+    }
+
+    function joinRoom(){
+      var code = ($("code").value || "").trim().toUpperCase();
+      if (!code){ $("hint").textContent = "請輸入房間碼"; return; }
+      $("hint").textContent = "加入中…";
+
+      socket.emit("player:join", {
+        code: code,
+        userId: userId,
+        name: (displayName || "Guest"),
+        avatarUrl: avatarUrl
+      }, function(res){
+        if (!(res && res.ok)){
+          $("hint").textContent = "加入失敗：" + ((res && res.error) || "");
+          return;
+        }
+        $("joinCard").style.display = "none";
+        $("gameCard").style.display = "";
+        onUpdate(res.room);
+      });
+    }
+
+    function sendAns(choiceIdx){
+      if (answered || state !== "question") return;
+      answered = true;
+      $("status").textContent = "✅ 已送出，等待揭曉…";
+
+      socket.emit("player:answer", { code: roomCode, userId: userId, choiceIndex: choiceIdx }, function(res){
+        if (!(res && res.ok)) $("status").textContent = "⚠️ " + ((res && res.error) || "送出失敗");
+      });
+      renderChoices();
+    }
+
+    // timer
+    setInterval(function(){
+      if (state !== "question"){ $("timer").textContent = "—"; return; }
+      var remain = Math.max(0, (startAt + durationMs) - Date.now());
+      $("timer").textContent = Math.ceil(remain/1000) + "s";
+    }, 200);
+
+    function boot(config){
+      socket = io();
+
+      var urlCode = (params.get("code") || "").trim().toUpperCase();
+      if (urlCode) $("code").value = urlCode;
+
+      var autoJoined = false;
+
+      socket.on("connect", function(){
+        setConn(true);
+        if (urlCode && !autoJoined){
+          autoJoined = true;
+          joinRoom();
+        }
+      });
+
+      socket.on("disconnect", function(){ setConn(false); });
+      socket.on("room:update", onUpdate);
+
+      socket.on("question:reveal", function(p){
+        correctIndex = p.correctIndex;
+        var nodes = Array.prototype.slice.call(document.querySelectorAll(".choice"));
+        for (var i=0;i<nodes.length;i++){
+          nodes[i].classList.remove("good","bad");
+          if (i === correctIndex) nodes[i].classList.add("good");
+          else if (answered) nodes[i].classList.add("bad");
+          nodes[i].disabled = true;
+        }
+      });
+
+      $("joinBtn").onclick = joinRoom;
+    }
+
+    // start
+    cfg(function(err, c){
+      if (err){ $("hint").textContent = "⚠️ 讀取設定失敗"; return; }
+      initLiff(c.liffId || "", function(){ boot(c); });
+    });
+  })();
+  </script>
+</body>
+</html>
