@@ -39,3 +39,18 @@ npm start
 ## 400 人小提醒
 - 一台伺服器通常足夠（婚禮場景）
 - 不要水平擴充到多台（除非你懂 sticky session / Redis adapter）
+
+
+## 玩家名稱/頭像
+- 玩家端會自動使用 LINE Profile 的 displayName 與 pictureUrl，不需要輸入暱稱。
+- 若不是在 LINE LIFF 內（瀏覽器測試），會用訪客模式（無頭像）。
+
+
+## 一鍵進房
+- 將玩家連結分享成：`/player.html?code=房間碼`
+- 玩家在 LINE 內點開後，會自動加入（不用再按加入）。
+
+
+## QR 投影頁
+- 開啟：`/qr.html?code=房間碼`
+- 只顯示 QR code + 加入連結，適合現場投影讓賓客掃描。

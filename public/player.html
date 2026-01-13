@@ -18,11 +18,10 @@ button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;co
 
   <div class="card" id="joinCard">
     <div class="big">加入房間</div>
-    <p class="muted" id="hint">請輸入房間碼</p>
+    <p class="muted" id="hint">請輸入房間碼（暱稱會自動使用 LINE 名稱）</p>
     <input id="code" placeholder="ABC123"/>
     <div style="height:8px"></div>
-    <input id="name" placeholder="暱稱（可留空）"/>
-    <div style="height:10px"></div>
+<div style="height:10px"></div>
     <button id="joinBtn">加入</button>
   </div>
 
@@ -44,7 +43,8 @@ button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;co
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-let socket, roomCode="", userId="", displayName="";
+const params=new URLSearchParams(location.search);
+let socket, roomCode="", userId="", displayName="", avatarUrl="";
 let state="lobby", startAt=0, durationMs=0, answered=false, correctIndex=null, currentChoices=[];
 function setConn(ok){$("conn").textContent = ok?"已連線":"未連線";}
 async function cfg(){const r=await fetch("/config?role=player"); return r.json();}
@@ -54,8 +54,10 @@ async function initLiff(liffId){
     if(!liff.isLoggedIn()){ liff.login(); return; }
     const p=await liff.getProfile();
     userId=p.userId; displayName=p.displayName||"";
+    avatarUrl=p.pictureUrl||"";
   }catch(e){
     userId="guest-"+Math.random().toString(16).slice(2);
+    avatarUrl="";
     $("hint").textContent="⚠️ 似乎不是在 LINE LIFF，已用訪客模式（仍可測試）";
   }
 }
@@ -83,6 +85,20 @@ function onUpdate(s){
   if(state==="reveal"){ $("status").textContent="揭曉！"; }
   if(state==="ended"){ $("status").textContent="🎉 結束！"; }
 }
+
+function joinRoom(){
+    const code=$("code").value.trim().toUpperCase();
+    const name=(displayName||"Guest");
+    if(!code){ $("hint").textContent="請輸入房間碼"; return false; }
+    $("hint").textContent="加入中…";
+    socket.emit("player:join",{code,userId,name,avatarUrl},(res)=>{
+      if(!res?.ok){ $("hint").textContent="加入失敗："+(res.error||""); return; }
+      $("joinCard").style.display="none"; $("gameCard").style.display="";
+      onUpdate(res.room);
+    });
+    return true;
+}
+
 function sendAns(i){
   if(answered||state!=="question") return;
   answered=true; $("status").textContent="✅ 已送出，等待揭曉…";
@@ -99,7 +115,21 @@ setInterval(()=>{
   const c = await cfg();
   await initLiff(c.liffId||"");
   socket=io();
-  socket.on("connect",()=>setConn(true));
+
+  // One-click join: if URL has ?code=XXXX, auto join after socket connects.
+  const urlCodeAuto = (params.get("code")||"").trim().toUpperCase();
+  let autoJoined = false;
+  if (urlCodeAuto) $("code").value = urlCodeAuto;
+
+  socket.on("connect", ()=>{
+    if (urlCodeAuto && !autoJoined){
+      autoJoined = true;
+      joinRoom();
+    }
+  });
+
+    setConn(true);
+  });
   socket.on("disconnect",()=>setConn(false));
   socket.on("room:update",onUpdate);
   socket.on("question:reveal",(p)=>{
@@ -108,15 +138,11 @@ setInterval(()=>{
     const nodes=[...document.querySelectorAll(".choice")];
     nodes.forEach((n,idx)=>{ n.classList.remove("good","bad"); if(idx===correctIndex) n.classList.add("good"); else if(answered) n.classList.add("bad"); n.disabled=true; });
   });
-  $("joinBtn").onclick=()=>{
-    const code=$("code").value.trim().toUpperCase();
-    const name=($("name").value.trim()||displayName||"Guest");
-    if(!code){ $("hint").textContent="請輸入房間碼"; return; }
-    socket.emit("player:join",{code,userId,name},(res)=>{
-      if(!(res && res.ok)){ $("hint").textContent="加入失敗："+(res.error||""); return; }
-      $("joinCard").style.display="none"; $("gameCard").style.display="";
-      onUpdate(res.room);
-    });
-  };
+
+  // auto-fill room code from URL (?code=XXXX)
+  const urlCode = (params.get("code")||"").trim().toUpperCase();
+  if (urlCode) $("code").value = urlCode;
+
+  $("joinBtn").onclick=()=>joinRoom();
 })();
 </script></body></html>

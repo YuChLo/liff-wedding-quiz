@@ -13,6 +13,7 @@ button{padding:12px 14px;border-radius:12px;border:0;font-weight:900}
 .big{font-size:22px;font-weight:900}.muted{opacity:.75}
 code{background:#0f1626;border:1px solid #2a3b66;border-radius:10px;padding:4px 8px;display:inline-block}
 table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #223055;text-align:left}
+.avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;background:#0f1626;border:1px solid #2a3b66}
 </style></head><body>
 <div class="wrap">
   <div class="row" style="justify-content:space-between"><div class="big">主持台</div><div class="muted" id="conn">連線中…</div></div>
@@ -48,6 +49,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       <button class="danger" id="revealBtn">提前揭曉</button>
       <button class="primary" id="nextBtn">下一題</button>
       <a id="display" href="#" target="_blank" class="muted">開投影頁</a>
+      <a id="qr" href="#" target="_blank" class="muted">開 QR 頁</a>
     </div>
     <div style="height:12px"></div>
     <div class="muted" id="progress">—</div>
@@ -119,8 +121,9 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
     $("answers").textContent = s.answersCount || 0;
 
     var origin = baseUrl || location.origin;
-    $("joinUrl").textContent = origin + "/player.html";
+    $("joinUrl").textContent = origin + "/player.html?code=" + encodeURIComponent(s.code);
     $("display").href = origin + "/display.html?code=" + encodeURIComponent(s.code);
+  $("qr").href = origin + "/qr.html?code=" + encodeURIComponent(s.code);
 
     $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
     if (s.question) {
@@ -140,7 +143,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       var tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + (i + 1) + "</td>" +
-        "<td>" + esc(p.name) + "</td>" +
+        "<td>" + (p.avatarUrl ? ('<img class="avatar" referrerpolicy="no-referrer" src="' + esc(p.avatarUrl) + '"/>') : "") + esc(p.name) + "</td>" +
         "<td>" + p.score + "</td>" +
         "<td>" + (p.connected ? "🟢" : "⚪") + "</td>";
       lb.appendChild(tr);

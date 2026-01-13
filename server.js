@@ -18,6 +18,13 @@ const rooms = new Map();
 
 const now = () => Date.now();
 const normCode = (s) => (s||"").toString().trim().toUpperCase();
+const safeUrl = (s) => {
+  const v = (s||"").toString().trim();
+  if (!v) return "";
+  // allow https only (LINE pictureUrl is https)
+  return v.startsWith("https://") ? v : "";
+};
+
 const safeName = (s, fb="Guest") => ((s||"").toString().trim().slice(0,20) || fb);
 
 function makeCode(len=6){
@@ -39,7 +46,7 @@ function defaultQuestions(){
 
 function snapshot(room){
   const players = Array.from(room.players.values())
-    .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
+    .map(p=>({userId:p.userId,name:p.name,avatarUrl:p.avatarUrl||"",score:p.score,connected:p.connected}))
     .sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
   const q = room.questions[room.qIndex] || null;
   return {
@@ -183,15 +190,17 @@ io.on("connection", (socket)=>{
     const userId = String(p?.userId||"");
     if (!userId) return cb?.({ok:false,error:"Missing userId"});
     const name = safeName(p?.name);
+    const avatarUrl = safeUrl(p?.avatarUrl);
     socket.join("room:"+code);
 
     const existing = room.players.get(userId);
     if (existing){
       existing.socketId = socket.id;
       existing.name = name;
+      existing.avatarUrl = avatarUrl || existing.avatarUrl || "";
       existing.connected = true;
     } else {
-      room.players.set(userId, { userId, name, socketId: socket.id, score:0, lastQ:-1, connected:true });
+      room.players.set(userId, { userId, name, avatarUrl, socketId: socket.id, score:0, lastQ:-1, connected:true });
     }
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
