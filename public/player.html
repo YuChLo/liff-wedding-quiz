@@ -84,6 +84,7 @@
     var startAt = 0;
     var durationMs = 0;
     var answered = false;
+    var pickedIndex = null;
     var correctIndex = null;
     var currentChoices = [];
 
@@ -117,8 +118,8 @@
         $("choices").innerHTML = "";
       }
 
-      if (state === "lobby"){ answered = false; correctIndex = null; $("status").textContent = "等待主持人開始…"; }
-      if (state === "question"){ answered = false; correctIndex = null; $("status").textContent = "請選擇答案！"; }
+      if (state === "lobby"){ answered = false; pickedIndex = null; correctIndex = null; $("status").textContent = "等待主持人開始…"; }
+      if (state === "question"){ answered = false; pickedIndex = null; correctIndex = null; $("status").textContent = "請選擇答案！"; }
       if (state === "reveal"){ $("status").textContent = "揭曉！"; }
       if (state === "ended"){ $("status").textContent = "🎉 結束！"; $("q").textContent = "等待結果…"; $("choices").innerHTML=""; }
     }
@@ -132,7 +133,7 @@
         (function(idx){
           var c = currentChoices[idx];
           var b = document.createElement("button");
-          b.className = "choice";
+          b.className = "choice" + ((pickedIndex===idx) ? " picked" : "");
           b.disabled = (state !== "question") || answered;
           b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
                       + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
@@ -179,6 +180,7 @@
     function sendAns(choiceIdx){
       if (answered || state !== "question") return;
       answered = true;
+      pickedIndex = choiceIdx;
       $("status").textContent = "✅ 已送出，等待揭曉…";
 
       socket.emit("player:answer", { code: roomCode, userId: userId, choiceIndex: choiceIdx }, function(res){
