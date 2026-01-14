@@ -78,7 +78,7 @@
     var params = new URLSearchParams(location.search);
     var socket = null;
 
-    var roomCode = "";
+    var roomCode = new URLSearchParams(location.search).get("code");
     var userId = "";
     var state = "lobby";
     var currentQIndex = -999;
@@ -220,6 +220,12 @@
     function boot(){
       socket = io();
 
+    if (!roomCode) {
+      document.body.innerHTML = "<div style='color:#fff;padding:24px'>房間連結錯誤，請重新掃描 QR Code</div>";
+      return;
+    }
+
+
       var urlCode = (params.get("code") || "").trim().toUpperCase();
       if (urlCode) {
         $("code").value = urlCode;
@@ -231,12 +237,14 @@
       socket.on("disconnect", function(){ setConn(false); });
       socket.on("room:update", onUpdate);
 
-      socket.on("question:reveal", function(p){
-        // keep state in sync and re-render choices with correct/wrong coloring
-        state = "reveal";
-        correctIndex = p.correctIndex;
-        renderChoices();
-        $("status").textContent = "揭曉！";
+    socket.on("question:reveal", function(p){
+      state = "reveal";
+      correctIndex = p.correctIndex;
+      renderChoices();
+      $("status").textContent = "揭曉！";
+    });
+
+      $("status").textContent = "揭曉！";
       });
         for (var i=0;i<nodes.length;i++){
           nodes[i].classList.remove("good","bad");
@@ -246,9 +254,7 @@
         }
       });
 
-      $("joinBtn").onclick = joinRoom;
-      $("emp").addEventListener("keydown", function(e){
-        if (e.key === "Enter") joinRoom();
+      
       });
     }
 
