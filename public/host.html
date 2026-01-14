@@ -69,14 +69,6 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
         <div class="big">排行榜（前10）</div>
         <table><thead><tr><th>#</th><th>玩家</th><th>分數</th><th>連線</th></tr></thead><tbody id="lb"></tbody></table>
       </div>
-      <div class="col">
-        <div class="big">自訂題庫 JSON</div>
-        <div class="muted">格式：[{ "text":"題目","choices":["A","B","C","D"],"correctIndex":0 }]</div>
-        <textarea id="qJson" rows="10"></textarea>
-        <div style="height:10px"></div>
-        <button class="secondary" id="setQBtn">套用題庫</button>
-        <div class="muted" id="qHint"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -180,9 +172,6 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
     socket.on("room:answersCount", function (p) {
       $("answers").textContent = (p && p.answersCount) ? p.answersCount : $("answers").textContent;
     });
-
-    $("qJson").value = JSON.stringify(sampleQs20(), null, 2);
-
     $("createBtn").onclick = function () {
       adminKey = $("adminKey").value.trim();
       var hostName = ($("hostName").value.trim() || "Host");
@@ -220,16 +209,6 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       socket.emit("host:next", { adminKey: adminKey, code: roomCode }, function (r) {
         if (!(r && r.ok)) alert((r && r.error) || "失敗");
       });
-    };
-
-    $("setQBtn").onclick = function () {
-      try {
-        var qs = JSON.parse($("qJson").value);
-        $("qHint").textContent = "套用中…";
-                });
-      } catch (e) {
-        $("qHint").textContent = "JSON 格式錯誤";
-      }
     };
   }
 
