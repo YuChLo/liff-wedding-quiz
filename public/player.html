@@ -188,6 +188,7 @@
       if (answered || state !== "question") return;
       answered = true;
       pickedIndex = choiceIdx;
+      renderChoices();
       $("status").textContent = "✅ 已送出，等待揭曉…";
 
       socket.emit("player:answer", { code: roomCode, userId: userId, choiceIndex: choiceIdx }, function(res){
