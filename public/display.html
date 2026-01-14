@@ -1,76 +1,193 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8"/>
+<!doctype html><html lang="zh-Hant"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>婚禮問答 Display</title>
 <style>
-body{background:#0b1220;color:#e5e7eb;font-family:system-ui;margin:0}
-.wrap{padding:24px}
-.choice{border:2px solid #334155;border-radius:14px;padding:16px;margin:10px 0}
-.choice.good{border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.25)}
-.choice.bad{border-color:#64748b;opacity:.55}
-</style>
-</head>
-<body>
+body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814;color:#eaf0ff}
+.wrap{max-width:1200px;margin:0 auto;padding:22px}
+.big{font-size:44px;font-weight:900;line-height:1.1}
+.muted{opacity:.75}
+.card{background:#0b1020;border:1px solid #223055;border-radius:20px;padding:18px;margin:14px 0}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.choice{background:#0f16261626;border:2px solid #2a3b66;border-radius:18px;padding:16px;font-size:26px;font-weight:800}
+.good{border-color:#22c55e}
+.bad{border-color:#ef4444}
+table{width:100%;border-collapse:collapse;font-size:22px}
+th,td{padding:10px;border-bottom:1px solid #223055;text-align:left}
+.timer{font-size:44px;font-weight:900}
+.row{display:flex;gap:18px;align-items:flex-start}
+.col{flex:1}
+</style></head><body>
 <div class="wrap">
-  <h1 id="room"></h1>
-  <h2 id="q">等待題目…</h2>
-  <div id="choices"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div><div class="muted">房間碼</div><div class="big" id="code">—</div></div>
+    <div><div class="muted">倒數</div><div class="timer" id="timer">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="muted" id="progress">—</div>
+    <div class="big" id="q">等待題目…</div>
+    <div class="choices" id="choices"></div>
+    <div class="muted" id="state">—</div>
+  </div>
+
+  <div class="row">
+    <div class="col card">
+      <div class="big" style="font-size:32px">排行榜（前10）</div>
+      <table><thead><tr><th>#</th><th>玩家</th><th>分數</th></tr></thead><tbody id="lb"></tbody></table>
+    </div>
+    <div class="col card">
+      <div class="big" style="font-size:32px">回覆數</div>
+      <div class="big" id="answers" style="font-size:64px">0</div>
+    </div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const $ = (id)=>document.getElementById(id);
-const socket = io();
+(function(){
+  const $ = (id)=>document.getElementById(id);
+  const elCode = $("code");
+  const elTimer = $("timer");
+  const elProgress = $("progress");
+  const elQ = $("q");
+  const elChoices = $("choices");
+  const elState = $("state");
+  const elPlayers = $("players");
+  const elRankBody = $("rankBody");
 
-// read room code from URL
-const params = new URLSearchParams(location.search);
-const code = params.get("code");
-if(!code){
-  $("q").textContent = "請使用主持台開啟顯示畫面";
-}else{
-  socket.emit("display:join", code);
-}
+  const url = new URL(location.href);
+  const roomCode = (url.searchParams.get("code") || "").toUpperCase().trim();
 
-let state="lobby";
-let correctIndex=null;
-let labels=["A","B","C","D"];
+  // show code early even before join succeeds
+  if (roomCode) elCode.textContent = roomCode;
 
-function renderQuestion(q){
-  $("q").textContent = q.text;
-  $("choices").innerHTML="";
-  q.choices.forEach((c,i)=>{
-    const d=document.createElement("div");
-    d.className="choice";
-    d.textContent=labels[i]+" "+c;
-    if(state==="reveal" && typeof correctIndex==="number"){
-      if(i===correctIndex) d.classList.add("good");
-      else d.classList.add("bad");
+  const socket = io({ transports:["websocket","polling"] });
+
+  // ---------- render helpers ----------
+  function setText(el, v){ if(el) el.textContent = (v ?? ""); }
+  function clear(el){ if(el) el.innerHTML = ""; }
+
+  function renderChoices(question, revealCorrectIndex){
+    clear(elChoices);
+    if (!question || !Array.isArray(question.choices)) return;
+
+    question.choices.forEach((label, idx)=>{
+      const div = document.createElement("div");
+      div.className = "choice";
+      div.textContent = String.fromCharCode(65+idx) + " " + label;
+
+      if (typeof revealCorrectIndex === "number"){
+        if (idx === revealCorrectIndex) div.classList.add("good");
+        else div.classList.add("bad");
+      }
+      elChoices.appendChild(div);
+    });
+  }
+
+  function renderLeaderboard(lb){
+    clear(elRankBody);
+    if (!Array.isArray(lb)) return;
+    lb.slice(0,10).forEach((p, i)=>{
+      const tr = document.createElement("tr");
+      const tdRank = document.createElement("td");
+      tdRank.textContent = String(i+1);
+      const tdName = document.createElement("td");
+      // this project uses employeeId / name (no avatar needed)
+      tdName.textContent = p.name || p.employeeId || p.id || "—";
+      const tdScore = document.createElement("td");
+      tdScore.textContent = String(p.score ?? 0);
+      tr.appendChild(tdRank);
+      tr.appendChild(tdName);
+      tr.appendChild(tdScore);
+      elRankBody.appendChild(tr);
+    });
+  }
+
+  function showWaitingResult(){
+    setText(elProgress, "");
+    setText(elQ, "等待結果揭曉…");
+    clear(elChoices);
+    setText(elState, "");
+  }
+
+  function renderSnapshot(room){
+    if (!room) return;
+
+    // header
+    if (room.code) setText(elCode, room.code);
+    setText(elPlayers, String(room.playerCount ?? room.playersCount ?? 0));
+    setText(elTimer, room.timerText ?? room.countdownText ?? "—");
+
+    // state text
+    setText(elState, room.state ? ("狀態：" + room.state) : "");
+
+    // main
+    const q = room.question;
+    const total = room.totalQuestions ?? room.questionsCount ?? (room.questions ? room.questions.length : undefined);
+    const idx = room.qIndex ?? room.questionIndex ?? room.currentIndex ?? 0;
+
+    if (typeof total === "number"){
+      setText(elProgress, `第 ${idx+1} / ${total} 題`);
+    } else {
+      setText(elProgress, "");
     }
-    $("choices").appendChild(d);
+
+    if (room.state === "ended"){
+      showWaitingResult();
+    } else if (room.state === "reveal" && q){
+      setText(elQ, q.text || "");
+      // revealCorrectIndex might be on room.correctIndex
+      const ci = (typeof room.correctIndex === "number") ? room.correctIndex : (typeof q.correctIndex === "number" ? q.correctIndex : undefined);
+      renderChoices(q, ci);
+    } else if (q){
+      // lobby / question
+      setText(elQ, q.text || "等待題目…");
+      renderChoices(q, undefined);
+    } else {
+      setText(elQ, "等待題目…");
+      clear(elChoices);
+    }
+
+    renderLeaderboard(room.leaderboard || room.top || []);
+  }
+
+  // ---------- join flow ----------
+  socket.on("connect", ()=>{
+    setText(elState, "已連線");
+    if (!roomCode){
+      setText(elQ, "缺少房間碼（URL 需帶 ?code=XXXXXX）");
+      return;
+    }
+    socket.emit("display:join", { code: roomCode }, (res)=>{
+      if (!res || !res.ok){
+        setText(elQ, "加入房間失敗：" + (res?.error || "unknown"));
+        return;
+      }
+      renderSnapshot(res.room);
+    });
   });
-}
 
-socket.on("room:update",(s)=>{
-  $("room").textContent = s.code || "";
-  state = s.state;
-  if(typeof s.correctIndex==="number") correctIndex = s.correctIndex;
+  socket.on("disconnect", ()=>{
+    setText(elState, "已斷線");
+  });
 
-  if(state==="ended"){
-    $("q").textContent="等待結果揭曉";
-    $("choices").innerHTML="";
-    return;
-  }
-  if(s.question){
-    renderQuestion(s.question);
-  }
-});
+  // server pushes
+  socket.on("room:update", (room)=>{
+    renderSnapshot(room);
+  });
 
-socket.on("question:reveal",(p)=>{
-  state="reveal";
-  correctIndex = p.correctIndex;
-  if(p.question) renderQuestion(p.question);
-});
-</script>
-</body>
-</html>
+  socket.on("question:reveal", (p)=>{
+    // p: {code, correctIndex} (and maybe room snapshot)
+    // If server already broadcasted room:update, this is just a backup.
+    if (p && (p.code || roomCode) && typeof p.correctIndex === "number"){
+      // try to add reveal colors on current DOM
+      const nodes = elChoices ? Array.from(elChoices.children) : [];
+      nodes.forEach((node, idx)=>{
+        node.classList.remove("good","bad");
+        if (idx === p.correctIndex) node.classList.add("good");
+        else node.classList.add("bad");
+      });
+    }
+  });
+})();
+</script></body></html>

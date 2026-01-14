@@ -38,17 +38,11 @@ function defaultQuestions(){
 }
 
 function snapshot(room){
-  const playersCount = room.players ? room.players.size : 0;
-
   const players = Array.from(room.players.values())
     .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
     .sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
-  let q = null;
-  if (room.state !== "lobby" && room.qIndex >= 0) {
-    q = room.questions[room.qIndex] || null;
-  }
+  const q = room.questions[room.qIndex] || null;
   return {
-    playersCount,
     code: room.code,
     state: room.state,
     qIndex: room.qIndex,
@@ -80,7 +74,7 @@ io.on("connection", (socket)=>{
       code,
       hostSocket: socket.id,
       state:"lobby",
-      qIndex:-1,
+      qIndex:0,
       startAt:0,
       durationMs:15000,
       questions: defaultQuestions(),
@@ -104,6 +98,29 @@ io.on("connection", (socket)=>{
     broadcast(room);
   });
 
+  socket.on("host:setQuestions", (p, cb)=>{
+    const code = normCode(p?.code);
+    const room = rooms.get(code);
+    if (!room) return cb?.({ok:false,error:"Room not found"});
+    if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
+    const qs = p?.questions;
+    if (!Array.isArray(qs) || !qs.length) return cb?.({ok:false,error:"Invalid questions"});
+    const clean = [];
+    for (const q of qs){
+      if (!q?.text || !Array.isArray(q?.choices) || q.choices.length!==4) continue;
+      const ci = Number(q.correctIndex);
+      if (![0,1,2,3].includes(ci)) continue;
+      clean.push({text:String(q.text).slice(0,120),choices:q.choices.map(x=>String(x).slice(0,40)),correctIndex:ci});
+    }
+    if (!clean.length) return cb?.({ok:false,error:"No valid questions"});
+    room.questions = clean;
+    room.qIndex = 0;
+    room.state = "lobby";
+    room.answers.clear();
+    cb?.({ok:true, room: snapshot(room)});
+    broadcast(room);
+  });
+
   socket.on("host:start", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
@@ -122,11 +139,8 @@ io.on("connection", (socket)=>{
   function reveal(code){
     const room = rooms.get(code);
     if (!room || room.state!=="question") return;
-    let q = null;
-  if (room.state !== "lobby" && room.qIndex >= 0) {
-    q = room.questions[room.qIndex];
-  }
-const correct = q.correctIndex;
+    const q = room.questions[room.qIndex];
+    const correct = q.correctIndex;
     for (const [uid, ans] of room.answers.entries()){
       const player = room.players.get(uid);
       if (!player) continue;
@@ -137,7 +151,6 @@ const correct = q.correctIndex;
       player.score += points;
     }
     room.state="reveal";
-    room.correctIndex = correct;
     broadcast(room);
     io.to("room:"+room.code).emit("question:reveal", { correctIndex: correct, top10: snapshot(room).players.slice(0,10) });
   }
@@ -149,36 +162,32 @@ const correct = q.correctIndex;
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     reveal(code);
     cb?.({ok:true, room: snapshot(room)});
-  });  socket.on("host:next", (p, cb)=>{
+  });
+
+  socket.on("host:next", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-
-    // Advance to next question (do not exceed total)
-    const total = room.questions.length;
-    if (total <= 0) {
-      room.state = "ended";
-      room.qIndex = -1;
-    } else if (room.state === "ended") {
-      // already ended, keep state
-      room.qIndex = Math.min(room.qIndex, total-1);
-    } else if (room.qIndex < 0) {
-      room.qIndex = 0;
-      room.state = "lobby";
-    } else if (room.qIndex + 1 < total) {
-      room.qIndex += 1;
-      room.state = "lobby";
-    } else {
-      // last question already reached
-      room.qIndex = total - 1;
-      room.state = "ended";
-    }
-
+    room.qIndex += 1;
     room.answers.clear();
+    room.state = (room.qIndex >= room.questions.length) ? "ended" : "lobby";
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
   });
+
+  socket.on("display:join", (p, cb) => {
+    try {
+      const code = normCode(p?.code);
+      const room = rooms.get(code);
+      if (!room) return cb && cb({ ok:false, error:"Room not found" });
+      socket.join("room:" + code);
+      return cb && cb({ ok:true, room: snapshot(room) });
+    } catch (e) {
+      return cb && cb({ ok:false, error: String(e && e.message ? e.message : e) });
+    }
+  });
+
   socket.on("player:join", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
@@ -186,14 +195,6 @@ const correct = q.correctIndex;
     const userId = String(p?.userId||"");
     if (!userId) return cb?.({ok:false,error:"Missing userId"});
     const name = safeName(p?.name);
-    // Employee ID validation (digits only, length 4~10)
-    if (!/^[0-9]+$/.test(name)) {
-      return cb({ ok:false, error:"工號只能輸入數字（不可英文/符號）" });
-    }
-    if (name.length < 4 || name.length > 10) {
-      return cb({ ok:false, error:"工號長度需 4~10 碼" });
-    }
-
     socket.join("room:"+code);
 
     const existing = room.players.get(userId);
@@ -207,16 +208,6 @@ const correct = q.correctIndex;
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
   });
-
-  // Display/observer join (not a player, won't appear in leaderboard)
-  socket.on("display:join", ({ code }, cb) => {
-    const room = rooms.get((code||"").toString().trim().toUpperCase());
-    if (!room) return cb && cb({ ok:false, error:"Room not found" });
-    socket.join(room.code);
-    socket.emit("room:update", snapshot(room));
-    cb && cb({ ok:true });
-  });
-
 
   socket.on("player:answer", (p, cb)=>{
     const code = normCode(p?.code);
@@ -236,12 +227,6 @@ const correct = q.correctIndex;
   });
 
   socket.on("disconnect", ()=>{
-    // broadcastUpdatesOnDisconnect
-    try { rooms.forEach(r => io.to(r.code).emit("room:update", snapshot(r))); } catch(e) {}
-try {
-      rooms.forEach(room=>{ io.to(room.code).emit("room:update", snapshot(room)); });
-    } catch(e){}
-
     for (const room of rooms.values()){
       for (const pl of room.players.values()){
         if (pl.socketId === socket.id) pl.connected = false;
