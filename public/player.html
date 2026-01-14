@@ -13,7 +13,7 @@
     input,button{font-size:16px}
     input{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
     button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;color:#fff;font-weight:800}
-    .choice{width:100%;text-align:left;background:#0f1626;border:2px solid #2a3b66;border-radius:14px;padding:14px}
+    .choice{position:relative;width:100%;text-align:left;background:#0f1626;border:2px solid #2a3b66;border-radius:14px;padding:14px}
     .good{border-color:#22c55e}.bad{border-color:#ef4444}
     .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
     .big{font-size:22px;font-weight:900}
@@ -81,6 +81,7 @@
     var roomCode = "";
     var userId = "";
     var state = "lobby";
+    var currentQIndex = -999;
     var startAt = 0;
     var durationMs = 0;
     var answered = false;
@@ -118,8 +119,8 @@
         $("choices").innerHTML = "";
       }
 
-      if (state === "lobby"){ answered = false; pickedIndex = null; correctIndex = null; $("status").textContent = "等待主持人開始…"; }
-      if (state === "question"){ answered = false; pickedIndex = null; correctIndex = null; $("status").textContent = "請選擇答案！"; }
+      if (state === "lobby"){ $("status").textContent = "等待主持人開始…"; }
+      if (state === "question"){ $("status").textContent = answered ? "✅ 已送出，等待揭曉…" : "請選擇答案！"; }
       if (state === "reveal"){ $("status").textContent = "揭曉！"; }
       if (state === "ended"){ $("status").textContent = "🎉 結束！"; $("q").textContent = "等待結果…"; $("choices").innerHTML=""; }
     }
@@ -133,7 +134,13 @@
         (function(idx){
           var c = currentChoices[idx];
           var b = document.createElement("button");
-          b.className = "choice" + ((pickedIndex===idx) ? " picked" : "");
+          b.className = "choice";
+      if(pickedIndex===idx) b.classList.add("picked");
+      if(state==="reveal" && correctIndex!==null){
+        if(idx===correctIndex) b.classList.add("good");
+        else b.classList.add("bad");
+        if(pickedIndex===idx && pickedIndex!==correctIndex) b.classList.add("pickedWrong");
+      }
           b.disabled = (state !== "question") || answered;
           b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
                       + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
