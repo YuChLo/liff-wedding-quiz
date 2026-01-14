@@ -1,235 +1,86 @@
-<!doctype html><html lang="zh-Hant"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>婚禮問答 Host</title>
-<style>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Host</title>
+  <style>
     *,*::before,*::after{box-sizing:border-box}
-
-body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
-.wrap{max-width:980px;margin:0 auto;padding:16px}
-.card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
-input,button,textarea{font-size:16px} input,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
-button{padding:12px 14px;border-radius:12px;border:0;font-weight:900}
-.primary{background:#22c55e;color:#06101f}.secondary{background:#3b82f6;color:#fff}.danger{background:#ef4444;color:#fff}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.col{flex:1;min-width:260px}
-.big{font-size:22px;font-weight:900}.muted{opacity:.75}
-code{background:#0f1626;border:1px solid #2a3b66;border-radius:10px;padding:4px 8px;display:inline-block}
-table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #223055;text-align:left}
-.avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;background:#0f1626;border:1px solid #2a3b66}
-
-    input,button,select{max-width:100%}
-    .row{min-width:0}
-    .row > *{min-width:0}
-
-</style></head><body>
-<div class="wrap">
-  <div class="row" style="justify-content:space-between"><div class="big">主持台</div><div class="muted" id="conn">連線中…</div></div>
+    body{font-family:system-ui,-apple-system; background:#0b1020; color:#fff; margin:0; padding:16px}
+    .card{background:#141a33;border-radius:14px;padding:14px;margin-bottom:12px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    input,button{padding:12px;border-radius:10px;border:0;font-size:16px}
+    input{flex:1}
+    button.primary{background:#2f6bff;color:#fff}
+    button.secondary{background:#2f6bff;color:#fff}
+    button:disabled{opacity:.5}
+    .muted{opacity:.75}
+  </style>
+</head>
+<body>
 
   <div class="card">
     <div class="row">
-      <div class="col"><div class="muted">ADMIN_KEY</div><input id="adminKey" placeholder="填 .env 的 ADMIN_KEY"/></div>
-      <div class="col"><div class="muted">主持人名稱</div><input id="hostName" placeholder="可留空"/></div>
+      <input id="adminKey" placeholder="ADMIN KEY"/>
+      <input id="hostName" placeholder="主持人名稱"/>
+      <button class="primary" id="createBtn">建立房間</button>
     </div>
-    <div style="height:10px"></div>
-    <div class="row">
-      <button class="secondary" id="createBtn">建立房間</button>
-      <input id="joinCode" placeholder="房間碼（重連用）" style="max-width:240px"/>
-      <button class="secondary" id="joinBtn">加入房間</button>
-    </div>
-    <p class="muted" id="hint"></p>
+    <div class="muted" id="roomInfo">尚未建立房間</div>
   </div>
 
-  <div class="card" id="roomCard" style="display:none">
-    <div class="row" style="justify-content:space-between">
-      <div>
-        <div class="muted">房間碼</div><div class="big" id="code">—</div>
-        <div class="muted">玩家加入頁</div><code id="joinUrl">—</code>
-      </div>
-      <div style="text-align:right">
-        <div class="muted">回覆數</div><div class="big" id="answers">0</div>
-        <div class="muted">狀態</div><div class="big" id="state">—</div>
-      </div>
-    </div>
-    <hr style="border:0;border-top:1px solid #223055;margin:14px 0"/>
+  <div class="card">
     <div class="row">
-      <button class="secondary" id="startBtn">開始（15s）</button>
-      <button class="danger" id="revealBtn">提前揭曉</button>
+      <button class="secondary" id="displayBtn">開投影頁</button>
+      <button class="secondary" id="qrBtn">開 QR 頁</button>
       <button class="primary" id="nextBtn">下一題</button>
-      <button class="secondary" id="openDisplay">開投影頁</button>
-      <a id="qr" href="#" target="_blank" class="muted">開 QR 頁</a>
-    </div>
-    <div style="height:12px"></div>
-    <div class="muted" id="progress">—</div>
-    <div class="big" id="q">—</div>
-    <div class="muted" id="choices">—</div>
-
-    <div style="height:16px"></div>
-    <div class="row">
-      <div class="col">
-        <div class="big">排行榜（前10）</div>
-        <table><thead><tr><th>#</th><th>玩家</th><th>分數</th><th>連線</th></tr></thead><tbody id="lb"></tbody></table>
-      </div>
     </div>
   </div>
-</div>
 
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="/socket.io/socket.io.js"></script>
-<script>
-(function () {
-  function $(id) { return document.getElementById(id); }
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const socket = io();
 
-  var socket = null;
-  var roomCode = "";
-  var baseUrl = "";
-  var adminKey = "";
-  var liffName = "";
+    let roomCode = "";
 
-  function setConn(ok) { $("conn").textContent = ok ? "已連線" : "未連線"; }
+    // 一載入就綁定按鈕（不等 update）
+    $("displayBtn").onclick = () => {
+      if (!roomCode) return alert("請先建立房間");
+      window.open(
+        location.origin + "/display.html?code=" + encodeURIComponent(roomCode),
+        "_blank"
+      );
+    };
 
-  function esc(s) {
-    s = String(s);
-    return s.replace(/[&<>"']/g, function (m) {
-      return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[m];
-    });
-  }
+    $("qrBtn").onclick = () => {
+      if (!roomCode) return alert("請先建立房間");
+      window.open(
+        location.origin + "/qr.html?code=" + encodeURIComponent(roomCode),
+        "_blank"
+      );
+    };
 
-  function cfg(cb) {
-    fetch("/config?role=host")
-      .then(function (r) { return r.json(); })
-      .then(function (j) { cb(null, j); })
-      .catch(function (e) { cb(e); });
-  }
-
-  function initLiff(liffId, done) {
-    if (!window.liff || !liffId) return done(); // 沒有 LIFF 也可在瀏覽器測試
-    liff.init({ liffId: liffId }).then(function () {
-      if (!liff.isLoggedIn()) { liff.login(); return; }
-      return liff.getProfile().then(function (p) {
-        liffName = (p && p.displayName) ? p.displayName : "";
-        done();
-      }).catch(function () { done(); });
-    }).catch(function () { done(); });
-  }
-
-  function update(s) {
-    roomCode = s.code;
-    $("roomCard").style.display = "";
-    $("code").textContent = s.code;
-    $("state").textContent = s.state;
-    $("answers").textContent = s.answersCount || 0;
-
-    var origin = baseUrl || location.origin;
-    $("joinUrl").textContent = origin + "/player.html?code=" + encodeURIComponent(s.code);
-    (function(){
-      var displayUrl = origin + "/display.html?code=" + encodeURIComponent(s.code);
-      var qrUrl = origin + "/qr.html?code=" + encodeURIComponent(s.code);
-
-      var dispEl = document.getElementById("display") || document.getElementById("displayBtn");
-      if (dispEl) {
-        if (typeof dispEl.href !== "undefined") dispEl.href = displayUrl;
-        else dispEl.onclick = function(){ window.open(displayUrl, "_blank"); };
-      }
-
-      var qrEl = document.getElementById("qr") || document.getElementById("qrBtn");
-      if (qrEl) {
-        if (typeof qrEl.href !== "undefined") qrEl.href = qrUrl;
-        else qrEl.onclick = function(){ window.open(qrUrl, "_blank"); };
-      }
-    })();
-$("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
-    if (s.question) {
-      $("q").textContent = s.question.text;
-      var c = s.question.choices;
-      $("choices").textContent = "A " + c[0] + " | B " + c[1] + " | C " + c[2] + " | D " + c[3];
-    } else {
-      $("q").textContent = "—";
-      $("choices").textContent = "—";
-    }
-
-    var lb = $("lb");
-    lb.innerHTML = "";
-    var players = s.players || [];
-    for (var i = 0; i < Math.min(10, players.length); i++) {
-      var p = players[i];
-      var tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + (i + 1) + "</td>" +
-        "<td>" + (p.avatarUrl ? ('<img class="avatar" referrerpolicy="no-referrer" src="' + esc(p.avatarUrl) + '"/>') : "") + esc(p.name) + "</td>" +
-        "<td>" + p.score + "</td>" +
-        "<td>" + (p.connected ? "🟢" : "⚪") + "</td>";
-      lb.appendChild(tr);
-    }
-  }
-
-  function sampleQs20() {
-    var out = [];
-    for (var i = 1; i <= 20; i++) {
-      out.push({ text: "第" + i + "題：請換成你們的故事", choices: ["A","B","C","D"], correctIndex: 0 });
-    }
-    return out;
-  }
-
-  function boot(c) {
-    baseUrl = c.baseUrl || "";
-
-    if (liffName && !$("hostName").value) $("hostName").value = liffName;
-
-    socket = io();
-    socket.on("connect", function () { setConn(true); });
-    socket.on("disconnect", function () { setConn(false); });
-    socket.on("room:update", function (snap) {
-      if (roomCode && snap.code !== roomCode) return;
-      update(snap);
-    });
-    socket.on("room:answersCount", function (p) {
-      $("answers").textContent = (p && p.answersCount) ? p.answersCount : $("answers").textContent;
-    });
-    $("createBtn").onclick = function () {
-      adminKey = $("adminKey").value.trim();
-      var hostName = ($("hostName").value.trim() || "Host");
-      $("hint").textContent = "建立中…";
-      socket.emit("host:create", { adminKey: adminKey, hostName: hostName }, function (res) {
-        if (!(res && res.ok)) { $("hint").textContent = "失敗：" + ((res && res.error) || ""); return; }
-        $("hint").textContent = "✅ 已建立";
+    $("createBtn").onclick = () => {
+      socket.emit("host:create", {
+        adminKey: $("adminKey").value,
+        hostName: $("hostName").value
+      }, res => {
+        if (!res?.ok) return alert("建立失敗");
         update(res.room);
       });
     };
 
-    $("joinBtn").onclick = function () {
-      adminKey = $("adminKey").value.trim();
-      var code = $("joinCode").value.trim().toUpperCase();
-      var hostName = ($("hostName").value.trim() || "Host");
-      $("hint").textContent = "加入中…";
-      socket.emit("host:join", { adminKey: adminKey, code: code, hostName: hostName }, function (res) {
-        if (!(res && res.ok)) { $("hint").textContent = "失敗：" + ((res && res.error) || ""); return; }
-        $("hint").textContent = "✅ 已加入";
-        update(res.room);
-      });
+    $("nextBtn").onclick = () => {
+      if (!roomCode) return alert("請先建立房間");
+      socket.emit("host:next", { code: roomCode });
     };
 
-    $("startBtn").onclick = function () {
-      socket.emit("host:start", { adminKey: adminKey, code: roomCode, durationMs: 15000 }, function (r) {
-        if (!(r && r.ok)) alert((r && r.error) || "失敗");
-      });
-    };
-    $("revealBtn").onclick = function () {
-      socket.emit("host:reveal", { adminKey: adminKey, code: roomCode }, function (r) {
-        if (!(r && r.ok)) alert((r && r.error) || "失敗");
-      });
-    };
-    $("nextBtn").onclick = function () {
-      socket.emit("host:next", { adminKey: adminKey, code: roomCode }, function (r) {
-        if (!(r && r.ok)) alert((r && r.error) || "失敗");
-      });
-    };
-  }
+    socket.on("room:update", update);
 
-  // 啟動流程：先抓 config → init liff → boot socket
-  cfg(function (err, c) {
-    if (err) { $("conn").textContent = "設定讀取失敗"; return; }
-    initLiff(c.liffId || "", function () { boot(c); });
-  });
-
-})();
-</script></body></html>
+    function update(s){
+      roomCode = s.code;
+      $("roomInfo").textContent = "房間碼：" + s.code;
+    }
+  </script>
+</body>
+</html>
