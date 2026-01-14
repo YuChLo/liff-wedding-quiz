@@ -137,6 +137,7 @@ const correct = q.correctIndex;
       player.score += points;
     }
     room.state="reveal";
+    room.correctIndex = correct;
     broadcast(room);
     io.to("room:"+room.code).emit("question:reveal", { correctIndex: correct, top10: snapshot(room).players.slice(0,10) });
   }
