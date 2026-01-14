@@ -121,10 +121,23 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
 
     var origin = baseUrl || location.origin;
     $("joinUrl").textContent = origin + "/player.html?code=" + encodeURIComponent(s.code);
-    $("display").href = origin + "/display.html?code=" + encodeURIComponent(s.code);
-  $("qr").href = origin + "/qr.html?code=" + encodeURIComponent(s.code);
+    (function(){
+      var displayUrl = origin + "/display.html?code=" + encodeURIComponent(s.code);
+      var qrUrl = origin + "/qr.html?code=" + encodeURIComponent(s.code);
 
-    $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
+      var dispEl = document.getElementById("display") || document.getElementById("displayBtn");
+      if (dispEl) {
+        if (typeof dispEl.href !== "undefined") dispEl.href = displayUrl;
+        else dispEl.onclick = function(){ window.open(displayUrl, "_blank"); };
+      }
+
+      var qrEl = document.getElementById("qr") || document.getElementById("qrBtn");
+      if (qrEl) {
+        if (typeof qrEl.href !== "undefined") qrEl.href = qrUrl;
+        else qrEl.onclick = function(){ window.open(qrUrl, "_blank"); };
+      }
+    })();
+$("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
     if (s.question) {
       $("q").textContent = s.question.text;
       var c = s.question.choices;
