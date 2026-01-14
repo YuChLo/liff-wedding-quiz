@@ -48,7 +48,6 @@ function snapshot(room){
     q = room.questions[room.qIndex] || null;
   }
   return {
-    serverNow: now(),
     playersCount,
     code: room.code,
     state: room.state,
@@ -57,7 +56,6 @@ function snapshot(room){
     question: q ? {text:q.text,choices:q.choices} : null,
     startAt: room.startAt,
     durationMs: room.durationMs,
-    correctIndex: room.correctIndex,
     answersCount: room.answers.size,
     players
   };
@@ -112,7 +110,6 @@ io.on("connection", (socket)=>{
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     if (!room.questions[room.qIndex]) return cb?.({ok:false,error:"No question"});
-    room.correctIndex = null;
     room.state="question";
     room.durationMs = Math.max(5000, Math.min(60000, Number(p?.durationMs||15000)));
     room.startAt = now();
@@ -139,7 +136,6 @@ const correct = q.correctIndex;
       const points = Math.round(1000 - 800*ratio); // 1000->200
       player.score += points;
     }
-    room.correctIndex = correct;
     room.state="reveal";
     broadcast(room);
     io.to("room:"+room.code).emit("question:reveal", { correctIndex: correct, top10: snapshot(room).players.slice(0,10) });

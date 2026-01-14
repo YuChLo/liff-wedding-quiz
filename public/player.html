@@ -6,21 +6,22 @@
   <title>婚禮問答 Player</title>
   <style>
     *,*::before,*::after{box-sizing:border-box}
-
     body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#0b0f1a;color:#eaf0ff}
     .wrap{max-width:720px;margin:0 auto;padding:16px}
     .card{background:#121a2b;border:1px solid #223055;border-radius:16px;padding:16px;margin:12px 0}
     input,button{font-size:16px}
     input{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3b66;background:#0f1626;color:#eaf0ff}
     button{width:100%;padding:12px;border-radius:12px;border:0;background:#3b82f6;color:#fff;font-weight:800}
+    button:disabled{opacity:.55}
     .choice{position:relative;width:100%;text-align:left;background:#0f1626;border:2px solid #2a3b66;border-radius:14px;padding:14px}
-    .good{border-color:#22c55e}.bad{border-color:#ef4444}.picked{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.25)}.pickedWrong{border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
+    .good{border-color:#22c55e}
+    .bad{border-color:#ef4444;opacity:.65}
+    .picked{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.25)}
+    .pickedWrong{border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
     .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
     .big{font-size:22px;font-weight:900}
     .muted{opacity:.75}
     .grid{display:grid;gap:10px}
-    input.readonly{opacity:.85}
-
   </style>
 </head>
 <body>
@@ -30,11 +31,10 @@
       <div class="muted" id="conn">連線中…</div>
     </div>
 
+    <!-- Join: only employee id (room code comes from URL ?code=XXXXXX) -->
     <div class="card" id="joinCard">
-      <div class="big">加入房間</div>
+      <div class="big">加入遊戲</div>
       <p class="muted" id="hint">請輸入工號（僅數字 4~10 碼）</p>
-      <input id="code" placeholder="ABC123"/>
-      <div style="height:10px"></div>
       <input id="emp" placeholder="請輸入工號（4~10 碼數字）" inputmode="numeric" pattern="[0-9]*"/>
       <div style="height:10px"></div>
       <button id="joinBtn">加入</button>
@@ -55,7 +55,7 @@
       <hr style="border:0;border-top:1px solid #223055;margin:14px 0"/>
 
       <div class="muted" id="progress">—</div>
-      <div class="big" id="q">等待題目…</div>
+      <div class="big" id="q">等待主持人按「下一題」開始…</div>
       <div style="height:12px"></div>
       <div class="grid" id="choices"></div>
       <div style="height:12px"></div>
@@ -75,93 +75,28 @@
       });
     }
 
-    var params = new URLSearchParams(location.search);
-    var socket = null;
+    const params = new URLSearchParams(location.search);
+    const roomCodeFromUrl = (params.get("code") || "").trim().toUpperCase();
 
-    var roomCode = new URLSearchParams(location.search).get("code");
-    var userId = "";
-    var state = "lobby";
-    var currentQIndex = -999;
-    var startAt = 0;
-    var durationMs = 0;
-    var serverOffsetMs = 0;
-    var answered = false;
-    var pickedIndex = null;
-    var lastQIndex = null;
-    var correctIndex = null;
-    var currentChoices = [];
-
-    function onUpdate(s){
-      roomCode = s.code;
-      state = s.state;
-      // reset selection when moving to a new question
-      if (typeof s.qIndex !== "undefined" && s.qIndex !== lastQIndex) {
-        lastQIndex = s.qIndex;
-        answered = false;
-        pickedIndex = null;
-        correctIndex = null;
-      }
-
-      // Hide question until host starts (lobby)
-      if (state === "lobby" || !s.question) {
-        const qEl = document.getElementById("q");
-        if (qEl) qEl.textContent = "等待主持人按「下一題」開始…";
-        const choicesEl = document.getElementById("choices");
-        if (choicesEl) choicesEl.innerHTML = "";
-        const progEl = document.getElementById("progress");
-        if (progEl) progEl.textContent = "等待開始";
-        const stEl = document.getElementById("status");
-        if (stEl) stEl.textContent = "等待主持人開始…";
-      }
-      startAt = s.startAt || 0;
-      durationMs = s.durationMs || 0;
-      if (s.serverNow) {
-        // serverNow is server time in ms; compute client-server offset
-        serverOffsetMs = Date.now() - s.serverNow;
-      }
-
-      $("room").textContent = s.code;
-      $("progress").textContent = "第 " + (Math.max(0,(s.qIndex||-1)+1)) + " / " + s.total + " 題";
-
-      if (s.question){
-        $("q").textContent = s.question.text;
-        currentChoices = s.question.choices || [];
-        renderChoices();
-      } else {
-        $("q").textContent = (state==="ended") ? "等待結果…" : "等待題目…";
-        $("choices").innerHTML = "";
-      }
-
-      if (state === "lobby"){ $("status").textContent = "等待主持人開始…"; answered=false; pickedIndex=null; correctIndex=null; }
-      if (state === "question"){ $("status").textContent = answered ? "✅ 已送出，等待揭曉…" : "請選擇答案！"; }
-      if (state === "reveal"){ $("status").textContent = "揭曉！"; }
-      if (state === "ended"){ $("status").textContent = "🎉 結束！"; $("q").textContent = "等待結果…"; $("choices").innerHTML=""; }
+    if (!roomCodeFromUrl) {
+      document.body.innerHTML = "<div style='color:#fff;padding:24px'>房間連結錯誤，請重新掃描 QR Code</div>";
+      return;
     }
 
-    function renderChoices(){
-      var wrap = $("choices");
-      wrap.innerHTML = "";
-      var labels = ["A","B","C","D"];
+    const socket = io();
 
-      for (var i=0;i<currentChoices.length;i++){
-        (function(idx){
-          var c = currentChoices[idx];
-          var b = document.createElement("button");
-          b.className = "choice";
-      if(pickedIndex===idx) b.classList.add("picked");
-      if(state==="reveal" && correctIndex!==null){
-        if(idx===correctIndex) b.classList.add("good");
-        else b.classList.add("bad");
-        if(pickedIndex===idx && pickedIndex!==correctIndex) b.classList.add("pickedWrong");
-      }
-          b.disabled = (state !== "question") || answered;
-          b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
-                      + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
-          b.onclick = function(){ sendAns(idx); };
-          wrap.appendChild(b);
-        })(i);
-      }
-    }
+    let roomCode = roomCodeFromUrl;
+    let userId = "";
+    let state = "lobby";
+    let startAt = 0;
+    let durationMs = 0;
+    let serverOffsetMs = 0;
+
+    let answered = false;
+    let pickedIndex = null;
+    let correctIndex = null;
+    let currentChoices = [];
+    let lastQIndex = null;
 
     function validateEmp(emp){
       if (!/^[0-9]+$/.test(emp)) return "工號只能輸入數字（不可英文/符號）";
@@ -169,26 +104,87 @@
       return "";
     }
 
+    function renderChoices(){
+      const wrap = $("choices");
+      wrap.innerHTML = "";
+      const labels = ["A","B","C","D"];
+
+      for (let idx=0; idx<currentChoices.length; idx++){
+        const c = currentChoices[idx];
+        const b = document.createElement("button");
+        b.className = "choice";
+        if (answered && pickedIndex === idx) b.classList.add("picked");
+
+        // Reveal coloring
+        if (state === "reveal" && correctIndex !== null) {
+          if (idx === correctIndex) b.classList.add("good");
+          else b.classList.add("bad");
+
+          if (pickedIndex === idx && pickedIndex !== correctIndex) b.classList.add("pickedWrong");
+        }
+
+        b.disabled = (state !== "question") || answered;
+        b.innerHTML = '<div class="muted">' + labels[idx] + '</div>'
+                    + '<div style="font-size:18px;font-weight:900">' + esc(c) + '</div>';
+        b.onclick = function(){ sendAns(idx); };
+        wrap.appendChild(b);
+      }
+    }
+
+    function onUpdate(s){
+      if (!s) return;
+      roomCode = s.code || roomCode;
+      state = s.state || "lobby";
+
+      // reset per-question state on question change
+      if (typeof s.qIndex !== "undefined" && s.qIndex !== lastQIndex) {
+        lastQIndex = s.qIndex;
+        answered = false;
+        pickedIndex = null;
+        correctIndex = null;
+      }
+
+      startAt = s.startAt || 0;
+      durationMs = s.durationMs || 0;
+      if (s.serverNow) serverOffsetMs = Date.now() - s.serverNow;
+
+      $("room").textContent = roomCode;
+      $("progress").textContent = "第 " + (Math.max(0,(s.qIndex||-1)+1)) + " / " + (s.total||0) + " 題";
+
+      if (state === "ended") {
+        $("q").textContent = "等待結果揭曉";
+        $("choices").innerHTML = "";
+        $("status").textContent = "等待結果揭曉…";
+        return;
+      }
+
+      if (state === "lobby" || !s.question) {
+        $("q").textContent = "等待主持人按「下一題」開始…";
+        $("choices").innerHTML = "";
+        $("status").textContent = "等待主持人開始…";
+        return;
+      }
+
+      // question / reveal
+      $("q").textContent = s.question.text || "";
+      currentChoices = s.question.choices || [];
+      renderChoices();
+
+      if (state === "question") $("status").textContent = answered ? "✅ 已送出，等待揭曉…" : "請選擇答案！";
+      if (state === "reveal") $("status").textContent = "揭曉！";
+    }
+
     function joinRoom(){
-      var code = ($("code").value || "").trim().toUpperCase();
-      var emp  = ($("emp").value  || "").trim();
-
-      if(!code){ $("hint").textContent="請輸入房間碼"; return; }
-
-      var msg = validateEmp(emp);
+      const emp = ($("emp").value || "").trim();
+      const msg = validateEmp(emp);
       if (msg){ $("hint").textContent = msg; return; }
 
-      $("hint").textContent="加入中…";
-
+      $("hint").textContent = "加入中…";
       userId = "emp-" + emp;
 
-      socket.emit("player:join", {
-        code: code,
-        userId: userId,
-        name: emp
-      }, function(res){
+      socket.emit("player:join", { code: roomCode, userId, name: emp }, function(res){
         if(!(res && res.ok)){
-          $("hint").textContent="加入失敗：" + ((res && res.error) || "");
+          $("hint").textContent = "加入失敗：" + ((res && res.error) || "");
           return;
         }
         $("joinCard").style.display="none";
@@ -201,66 +197,40 @@
       if (answered || state !== "question") return;
       answered = true;
       pickedIndex = choiceIdx;
-      renderChoices();
+      renderChoices(); // immediately show picked blue
       $("status").textContent = "✅ 已送出，等待揭曉…";
 
-      socket.emit("player:answer", { code: roomCode, userId: userId, choiceIndex: choiceIdx }, function(res){
+      socket.emit("player:answer", { code: roomCode, userId, choiceIndex: choiceIdx }, function(res){
         if (!(res && res.ok)) $("status").textContent = "⚠️ " + ((res && res.error) || "送出失敗");
       });
-      renderChoices();
     }
 
+    // countdown (server-synced)
     setInterval(function(){
       if (state !== "question"){ $("timer").textContent = "—"; return; }
-      var nowServer = Date.now() - serverOffsetMs;
-      var remain = Math.max(0, (startAt + durationMs) - nowServer);
+      const nowServer = Date.now() - serverOffsetMs;
+      const remain = Math.max(0, (startAt + durationMs) - nowServer);
       $("timer").textContent = Math.ceil(remain/1000) + "s";
     }, 200);
 
-    function boot(){
-      socket = io();
+    // socket events
+    socket.on("connect", function(){ setConn(true); });
+    socket.on("disconnect", function(){ setConn(false); });
+    socket.on("room:update", onUpdate);
 
-    if (!roomCode) {
-      document.body.innerHTML = "<div style='color:#fff;padding:24px'>房間連結錯誤，請重新掃描 QR Code</div>";
-      return;
-    }
-
-
-      var urlCode = (params.get("code") || "").trim().toUpperCase();
-      if (urlCode) {
-        $("code").value = urlCode;
-        $("code").readOnly = true;
-        $("code").classList.add("readonly");
-      }
-
-      socket.on("connect", function(){ setConn(true); });
-      socket.on("disconnect", function(){ setConn(false); });
-      socket.on("room:update", onUpdate);
-
+    // reveal: keep correctIndex and repaint (orange for wrong picked)
     socket.on("question:reveal", function(p){
       state = "reveal";
-      correctIndex = p.correctIndex;
+      correctIndex = (p && typeof p.correctIndex === "number") ? p.correctIndex : null;
       renderChoices();
       $("status").textContent = "揭曉！";
     });
 
-      $("status").textContent = "揭曉！";
-      });
-        for (var i=0;i<nodes.length;i++){
-          nodes[i].classList.remove("good","bad");
-          if (i === correctIndex) nodes[i].classList.add("good");
-          else if (answered) nodes[i].classList.add("bad");
-          nodes[i].disabled = true;
-        }
-      });
+    // UI events
+    $("joinBtn").onclick = joinRoom;
+    $("emp").addEventListener("keydown", function(e){ if (e.key === "Enter") joinRoom(); });
 
-      
-      });
-    }
-
-    boot();
   })();
   </script>
-
 </body>
 </html>

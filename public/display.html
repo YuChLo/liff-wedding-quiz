@@ -60,13 +60,10 @@ socket.on("connect", ()=>{
 socket.on("room:update",(s)=>{
   if(s.code!==roomCode) return;
   if (typeof s.playersCount === "number") { $("players").textContent = s.playersCount; }
-  state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0; correctIndex=(typeof s.correctIndex==="number")?s.correctIndex:null;
+  state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0; correctIndex=null;
   $("progress").textContent = "第 " + (Math.max(0,(s.qIndex||-1)+1)) + " / " + s.total + " 題";
   $("state").textContent = state==="question"?"答題中":(state==="reveal"?"揭曉":(state==="ended"?"結束":"等待"));
-  if(state==="ended"){
-    $("q").textContent="等待結果揭曉";
-    $("choices").innerHTML="";
-  } else if(s.question){
+  if(s.question){
     $("q").textContent=s.question.text;
     const labels=["A","B","C","D"];
     $("choices").innerHTML="";
@@ -74,11 +71,10 @@ socket.on("room:update",(s)=>{
       const d=document.createElement("div");
       d.className="choice";
       d.textContent=labels[i]+"  "+c;
-      if(state==="reveal" && correctIndex!==null){ d.classList.add(i===correctIndex?"good":"bad"); }
       $("choices").appendChild(d);
     });
   } else {
-    $("q").textContent = (state==="ended") ? "等待結果揭曉" : "等待題目…";
+    $("q").textContent = (state==="ended") ? "等待結果…" : "等待題目…";
     $("choices").innerHTML="";
   }
   const lb=$("lb"); lb.innerHTML="";
@@ -90,7 +86,7 @@ socket.on("room:update",(s)=>{
 });
 socket.on("question:reveal",(p)=>{
   correctIndex=p.correctIndex;
-  [...document.querySelectorAll(".choice")].forEach((n,idx)=>{ n.classList.remove("good","bad"); if(idx===correctIndex) n.classList.add("good"); else n.classList.add("bad"); });
+  [...document.querySelectorAll(".choice")].forEach((n,idx)=>{ if(idx===correctIndex) n.classList.add("good"); });
 });
 setInterval(()=>{
   if(state!=="question"){ $("timer").textContent="—"; return; }
