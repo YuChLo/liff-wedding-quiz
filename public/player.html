@@ -106,21 +106,21 @@
       durationMs = s.durationMs || 0;
 
       $("room").textContent = s.code;
-      $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
+      $("progress").textContent = "第 " + (Math.max(0,(s.qIndex||-1)+1)) + " / " + s.total + " 題";
 
       if (s.question){
         $("q").textContent = s.question.text;
         currentChoices = s.question.choices || [];
         renderChoices();
       } else {
-        $("q").textContent = "等待題目…";
+        $("q").textContent = (state==="ended") ? "等待結果…" : "等待題目…";
         $("choices").innerHTML = "";
       }
 
       if (state === "lobby"){ answered = false; correctIndex = null; $("status").textContent = "等待主持人開始…"; }
       if (state === "question"){ answered = false; correctIndex = null; $("status").textContent = "請選擇答案！"; }
       if (state === "reveal"){ $("status").textContent = "揭曉！"; }
-      if (state === "ended"){ $("status").textContent = "🎉 結束！"; }
+      if (state === "ended"){ $("status").textContent = "🎉 結束！"; $("q").textContent = "等待結果…"; $("choices").innerHTML=""; }
     }
 
     function renderChoices(){

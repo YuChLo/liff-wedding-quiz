@@ -43,7 +43,10 @@ function snapshot(room){
   const players = Array.from(room.players.values())
     .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
     .sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
-  const q = room.questions[room.qIndex] || null;
+  let q = null;
+  if (room.state !== "lobby" && room.qIndex >= 0) {
+    q = room.questions[room.qIndex] || null;
+  }
   return {
     playersCount,
     code: room.code,
@@ -101,29 +104,6 @@ io.on("connection", (socket)=>{
     broadcast(room);
   });
 
-  socket.on("host:setQuestions", (p, cb)=>{
-    const code = normCode(p?.code);
-    const room = rooms.get(code);
-    if (!room) return cb?.({ok:false,error:"Room not found"});
-    if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-    const qs = p?.questions;
-    if (!Array.isArray(qs) || !qs.length) return cb?.({ok:false,error:"Invalid questions"});
-    const clean = [];
-    for (const q of qs){
-      if (!q?.text || !Array.isArray(q?.choices) || q.choices.length!==4) continue;
-      const ci = Number(q.correctIndex);
-      if (![0,1,2,3].includes(ci)) continue;
-      clean.push({text:String(q.text).slice(0,120),choices:q.choices.map(x=>String(x).slice(0,40)),correctIndex:ci});
-    }
-    if (!clean.length) return cb?.({ok:false,error:"No valid questions"});
-    room.questions = clean;
-    room.qIndex = 0;
-    room.state = "lobby";
-    room.answers.clear();
-    cb?.({ok:true, room: snapshot(room)});
-    broadcast(room);
-  });
-
   socket.on("host:start", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
@@ -168,20 +148,36 @@ const correct = q.correctIndex;
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     reveal(code);
     cb?.({ok:true, room: snapshot(room)});
-  });
-
-  socket.on("host:next", (p, cb)=>{
+  });  socket.on("host:next", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-    room.qIndex += 1;
+
+    // Advance to next question (do not exceed total)
+    const total = room.questions.length;
+    if (total <= 0) {
+      room.state = "ended";
+      room.qIndex = -1;
+    } else if (room.state === "ended") {
+      // already ended, keep state
+      room.qIndex = Math.min(room.qIndex, total-1);
+    } else if (room.qIndex < 0) {
+      room.qIndex = 0;
+      room.state = "lobby";
+    } else if (room.qIndex + 1 < total) {
+      room.qIndex += 1;
+      room.state = "lobby";
+    } else {
+      // last question already reached
+      room.qIndex = total - 1;
+      room.state = "ended";
+    }
+
     room.answers.clear();
-    room.state = (room.qIndex >= room.questions.length) ? "ended" : "lobby";
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
   });
-
   socket.on("player:join", (p, cb)=>{
     const code = normCode(p?.code);
     const room = rooms.get(code);

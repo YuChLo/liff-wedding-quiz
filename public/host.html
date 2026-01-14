@@ -55,7 +55,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       <button class="secondary" id="startBtn">開始（15s）</button>
       <button class="danger" id="revealBtn">提前揭曉</button>
       <button class="primary" id="nextBtn">下一題</button>
-      <a id="display" href="#" target="_blank" class="muted">開投影頁</a>
+      <button class="secondary" id="openDisplay">開投影頁</button>
       <a id="qr" href="#" target="_blank" class="muted">開 QR 頁</a>
     </div>
     <div style="height:12px"></div>
@@ -226,9 +226,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       try {
         var qs = JSON.parse($("qJson").value);
         $("qHint").textContent = "套用中…";
-        socket.emit("host:setQuestions", { adminKey: adminKey, code: roomCode, questions: qs }, function (r) {
-          $("qHint").textContent = (r && r.ok) ? "✅ 已套用" : ("失敗：" + ((r && r.error) || ""));
-        });
+                });
       } catch (e) {
         $("qHint").textContent = "JSON 格式錯誤";
       }
