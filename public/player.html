@@ -84,6 +84,7 @@
     var currentQIndex = -999;
     var startAt = 0;
     var durationMs = 0;
+    var serverOffsetMs = 0;
     var answered = false;
     var pickedIndex = null;
     var lastQIndex = null;
@@ -93,6 +94,13 @@
     function onUpdate(s){
       roomCode = s.code;
       state = s.state;
+      // reset selection when moving to a new question
+      if (typeof s.qIndex !== "undefined" && s.qIndex !== lastQIndex) {
+        lastQIndex = s.qIndex;
+        answered = false;
+        pickedIndex = null;
+        correctIndex = null;
+      }
 
       // Hide question until host starts (lobby)
       if (state === "lobby" || !s.question) {
@@ -107,6 +115,10 @@
       }
       startAt = s.startAt || 0;
       durationMs = s.durationMs || 0;
+      if (s.serverNow) {
+        // serverNow is server time in ms; compute client-server offset
+        serverOffsetMs = Date.now() - s.serverNow;
+      }
 
       $("room").textContent = s.code;
       $("progress").textContent = "第 " + (Math.max(0,(s.qIndex||-1)+1)) + " / " + s.total + " 題";
@@ -120,7 +132,7 @@
         $("choices").innerHTML = "";
       }
 
-      if (state === "lobby"){ $("status").textContent = "等待主持人開始…"; }
+      if (state === "lobby"){ $("status").textContent = "等待主持人開始…"; answered=false; pickedIndex=null; correctIndex=null; }
       if (state === "question"){ $("status").textContent = answered ? "✅ 已送出，等待揭曉…" : "請選擇答案！"; }
       if (state === "reveal"){ $("status").textContent = "揭曉！"; }
       if (state === "ended"){ $("status").textContent = "🎉 結束！"; $("q").textContent = "等待結果…"; $("choices").innerHTML=""; }
@@ -220,8 +232,12 @@
       socket.on("room:update", onUpdate);
 
       socket.on("question:reveal", function(p){
+        // keep state in sync and re-render choices with correct/wrong coloring
+        state = "reveal";
         correctIndex = p.correctIndex;
-        var nodes = Array.prototype.slice.call(document.querySelectorAll(".choice"));
+        renderChoices();
+        $("status").textContent = "揭曉！";
+      });
         for (var i=0;i<nodes.length;i++){
           nodes[i].classList.remove("good","bad");
           if (i === correctIndex) nodes[i].classList.add("good");
