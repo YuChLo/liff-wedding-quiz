@@ -48,6 +48,7 @@ function snapshot(room){
     q = room.questions[room.qIndex] || null;
   }
   return {
+    serverNow: now(),
     playersCount,
     code: room.code,
     state: room.state,

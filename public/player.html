@@ -200,7 +200,8 @@
 
     setInterval(function(){
       if (state !== "question"){ $("timer").textContent = "—"; return; }
-      var remain = Math.max(0, (startAt + durationMs) - Date.now());
+      var nowServer = Date.now() - serverOffsetMs;
+      var remain = Math.max(0, (startAt + durationMs) - nowServer);
       $("timer").textContent = Math.ceil(remain/1000) + "s";
     }, 200);
 
