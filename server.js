@@ -176,16 +176,13 @@ io.on("connection", (socket)=>{
     broadcast(room);
   });
 
-  socket.on("display:join", (p, cb) => {
-    try {
-      const code = normCode(p?.code);
-      const room = rooms.get(code);
-      if (!room) return cb && cb({ ok:false, error:"Room not found" });
-      socket.join("room:" + code);
-      return cb && cb({ ok:true, room: snapshot(room) });
-    } catch (e) {
-      return cb && cb({ ok:false, error: String(e && e.message ? e.message : e) });
-    }
+  
+  socket.on("display:join", (p, cb)=>{
+    const code = normCode(p?.code);
+    const room = rooms.get(code);
+    if(!room) return cb?.({ok:false,error:"Room not found"});
+    socket.join("room:"+code);
+    cb?.({ok:true, room: snapshot(room)});
   });
 
   socket.on("player:join", (p, cb)=>{
