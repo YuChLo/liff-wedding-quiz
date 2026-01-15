@@ -15,6 +15,8 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
 .choice.good{border-color:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.45)}
 .choice.bad{border-color:#ef4444;opacity:.75}
 .timer{font-size:44px;font-weight:900}
+table{width:100%;border-collapse:collapse;font-size:22px}
+th,td{padding:8px;border-bottom:1px solid #223055;text-align:left}
 </style>
 </head>
 <body>
@@ -37,6 +39,14 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
   </div>
 
   <div class="card">
+    <div class="big" style="font-size:32px">排行榜（前 10 名）</div>
+    <table>
+      <thead><tr><th>#</th><th>玩家</th><th>分數</th></tr></thead>
+      <tbody id="leaderboard"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
     <div class="big" style="font-size:32px">目前人數</div>
     <div class="big" id="players" style="font-size:64px">0</div>
   </div>
@@ -54,6 +64,19 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
   let correctIndex=null;
   let lastQuestion=null;
   let startAt=0, durationMs=0, serverOffsetMs=0;
+
+  function renderLeaderboard(players){
+    const body = $("leaderboard");
+    body.innerHTML = "";
+    (players||[]).slice(0,10).forEach((p,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML = `<td>${i+1}</td><td>${p.name||p.playerId||""}</td><td>${p.score||0}</td>`;
+      body.appendChild(tr);
+    });
+    if(!body.children.length){
+      body.innerHTML = "<tr><td colspan='3' class='muted'>—</td></tr>";
+    }
+  }
 
   function render(){
     if(!lastQuestion || state==="lobby"){
@@ -80,11 +103,7 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
     });
   }
 
-  const socket = io("/", {
-    transports:["polling","websocket"],
-    upgrade:true,
-    timeout:20000
-  });
+  const socket = io("/", {transports:["polling","websocket"],upgrade:true,timeout:20000});
 
   socket.on("connect", ()=>{
     if(!code) return;
@@ -94,6 +113,7 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
         state=s.state;
         lastQuestion=s.question||null;
         $("players").textContent=s.playersCount||0;
+        renderLeaderboard(s.players||[]);
         startAt=s.startAt||0;
         durationMs=s.durationMs||0;
         if(s.serverNow) serverOffsetMs=Date.now()-s.serverNow;
@@ -108,6 +128,7 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
     if(s.question) lastQuestion=s.question;
     if(typeof s.correctIndex==="number") correctIndex=s.correctIndex;
     $("players").textContent=s.playersCount||0;
+    renderLeaderboard(s.players||[]);
     startAt=s.startAt||0;
     durationMs=s.durationMs||0;
     if(s.serverNow) serverOffsetMs=Date.now()-s.serverNow;
