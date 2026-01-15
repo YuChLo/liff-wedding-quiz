@@ -1,193 +1,284 @@
-<!doctype html><html lang="zh-Hant"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>婚禮問答 Display</title>
-<style>
-body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814;color:#eaf0ff}
-.wrap{max-width:1200px;margin:0 auto;padding:22px}
-.big{font-size:44px;font-weight:900;line-height:1.1}
-.muted{opacity:.75}
-.card{background:#0b1020;border:1px solid #223055;border-radius:20px;padding:18px;margin:14px 0}
-.choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-.choice{background:#0f16261626;border:2px solid #2a3b66;border-radius:18px;padding:16px;font-size:26px;font-weight:800}
-.good{border-color:#22c55e}
-.bad{border-color:#ef4444}
-table{width:100%;border-collapse:collapse;font-size:22px}
-th,td{padding:10px;border-bottom:1px solid #223055;text-align:left}
-.timer{font-size:44px;font-weight:900}
-.row{display:flex;gap:18px;align-items:flex-start}
-.col{flex:1}
-</style></head><body>
-<div class="wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <div><div class="muted">房間碼</div><div class="big" id="code">—</div></div>
-    <div><div class="muted">倒數</div><div class="timer" id="timer">—</div></div>
-  </div>
-
-  <div class="card">
-    <div class="muted" id="progress">—</div>
-    <div class="big" id="q">等待題目…</div>
-    <div class="choices" id="choices"></div>
-    <div class="muted" id="state">—</div>
-  </div>
-
-  <div class="row">
-    <div class="col card">
-      <div class="big" style="font-size:32px">排行榜（前10）</div>
-      <table><thead><tr><th>#</th><th>玩家</th><th>分數</th></tr></thead><tbody id="lb"></tbody></table>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>婚禮問答 Display</title>
+  <style>
+    :root{
+      --bg:#0a0f1e;
+      --panel:rgba(15,23,42,.75);
+      --border:rgba(148,163,184,.25);
+      --text:#e2e8f0;
+      --muted:#94a3b8;
+      --accent:#3b82f6;
+      --ok:#22c55e;
+      --bad:#ef4444;
+      --warn:#f59e0b; /* 橘色 */
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: radial-gradient(1200px 800px at 20% 0%, rgba(59,130,246,.20), transparent 60%),
+                  radial-gradient(900px 700px at 80% 20%, rgba(168,85,247,.16), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      min-height:100vh;
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:28px 22px 40px}
+    .top{
+      display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+      margin-bottom:18px;
+    }
+    .codeBox .label{color:var(--muted);font-size:14px;margin-bottom:6px}
+    .codeBox .code{font-size:44px;font-weight:800;letter-spacing:.04em;line-height:1}
+    .timerBox{ text-align:right}
+    .timerBox .label{color:var(--muted);font-size:14px;margin-bottom:6px}
+    .timerBox .timer{font-size:44px;font-weight:800;line-height:1}
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      backdrop-filter: blur(10px);
+    }
+    .questionCard{padding:18px 18px;margin-bottom:18px}
+    .progress{color:var(--muted);font-size:14px;margin-bottom:6px}
+    .q{font-size:40px;font-weight:800;line-height:1.15;margin:0 0 8px}
+    .sub{color:var(--muted);font-size:16px}
+    .choices{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top:14px;
+    }
+    .choice{
+      border:2px solid rgba(59,130,246,.35);
+      border-radius:16px;
+      padding:14px 14px;
+      min-height:64px;
+      display:flex;align-items:center;
+      font-size:22px;font-weight:700;
+      color:var(--text);
+      background: rgba(2,6,23,.15);
+    }
+    .choice.ok{ border-color: rgba(34,197,94,.9); }
+    .choice.bad{ border-color: rgba(239,68,68,.9); }
+    /* display不需要顯示狀態字樣 */
+    #state{display:none}
+    .bottom{
+      display:grid;
+      grid-template-columns: 2fr 1fr;
+      gap:18px;
+      margin-top:18px;
+    }
+    .h{font-size:26px;font-weight:800;margin:0 0 10px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-top:1px solid rgba(148,163,184,.18);font-size:18px}
+    th{color:var(--muted);font-weight:700}
+    td{color:var(--text);font-weight:700}
+    .bigNum{font-size:56px;font-weight:900;line-height:1;margin:4px 0 0}
+    @media (max-width:860px){
+      .q{font-size:32px}
+      .codeBox .code,.timerBox .timer{font-size:36px}
+      .choices{grid-template-columns:1fr}
+      .bottom{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="codeBox">
+        <div class="label">房間碼</div>
+        <div class="code" id="code">—</div>
+      </div>
+      <div class="timerBox">
+        <div class="label">倒數</div>
+        <div class="timer" id="timer">—</div>
+      </div>
     </div>
-    <div class="col card">
-      <div class="big" style="font-size:32px">回覆數</div>
-      <div class="big" id="answers" style="font-size:64px">0</div>
+
+    <div class="card questionCard">
+      <div class="progress" id="progress">第 0 / 0 題</div>
+      <h1 class="q" id="q">等待主持人按「開始」開始…</h1>
+      <div class="sub" id="state">—</div>
+
+      <div class="choices" id="choices"></div>
+      <div class="sub" id="revealText" style="margin-top:8px;display:none;">揭曉！</div>
+    </div>
+
+    <div class="bottom">
+      <div class="card">
+        <div class="h">排行榜（前10）</div>
+        <table>
+          <thead>
+            <tr><th style="width:60px">#</th><th>玩家</th><th style="width:120px">分數</th></tr>
+          </thead>
+          <tbody id="lb"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="h">目前人數</div>
+        <div class="bigNum" id="answers">0</div>
+      </div>
     </div>
   </div>
-</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-(function(){
-  const $ = (id)=>document.getElementById(id);
-  const elCode = $("code");
-  const elTimer = $("timer");
-  const elProgress = $("progress");
-  const elQ = $("q");
-  const elChoices = $("choices");
-  const elState = $("state");
-  const elPlayers = $("players");
-  const elRankBody = $("rankBody");
-
-  const url = new URL(location.href);
-  const roomCode = (url.searchParams.get("code") || "").toUpperCase().trim();
-
-  // show code early even before join succeeds
-  if (roomCode) elCode.textContent = roomCode;
-
-  const socket = io({ transports:["websocket","polling"] });
-
-  // ---------- render helpers ----------
-  function setText(el, v){ if(el) el.textContent = (v ?? ""); }
-  function clear(el){ if(el) el.innerHTML = ""; }
-
-  function renderChoices(question, revealCorrectIndex){
-    clear(elChoices);
-    if (!question || !Array.isArray(question.choices)) return;
-
-    question.choices.forEach((label, idx)=>{
-      const div = document.createElement("div");
-      div.className = "choice";
-      div.textContent = String.fromCharCode(65+idx) + " " + label;
-
-      if (typeof revealCorrectIndex === "number"){
-        if (idx === revealCorrectIndex) div.classList.add("good");
-        else div.classList.add("bad");
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    (function(){
+      function qs(name){
+        var m = new RegExp('[?&]'+name+'=([^&]+)').exec(location.search);
+        return m ? decodeURIComponent(m[1]) : '';
       }
-      elChoices.appendChild(div);
-    });
-  }
+      var code = qs('code') || '';
+      var elCode = document.getElementById('code');
+      var elTimer = document.getElementById('timer');
+      var elProgress = document.getElementById('progress');
+      var elQ = document.getElementById('q');
+      var elChoices = document.getElementById('choices');
+      var elLB = document.getElementById('lb');
+      var elPlayers = document.getElementById('answers'); // reuse id for player count
+      var elRevealText = document.getElementById('revealText');
 
-  function renderLeaderboard(lb){
-    clear(elRankBody);
-    if (!Array.isArray(lb)) return;
-    lb.slice(0,10).forEach((p, i)=>{
-      const tr = document.createElement("tr");
-      const tdRank = document.createElement("td");
-      tdRank.textContent = String(i+1);
-      const tdName = document.createElement("td");
-      // this project uses employeeId / name (no avatar needed)
-      tdName.textContent = p.name || p.employeeId || p.id || "—";
-      const tdScore = document.createElement("td");
-      tdScore.textContent = String(p.score ?? 0);
-      tr.appendChild(tdRank);
-      tr.appendChild(tdName);
-      tr.appendChild(tdScore);
-      elRankBody.appendChild(tr);
-    });
-  }
+      elCode.textContent = code ? code : '—';
 
-  function showWaitingResult(){
-    setText(elProgress, "");
-    setText(elQ, "等待結果揭曉…");
-    clear(elChoices);
-    setText(elState, "");
-  }
+      var socket = window.io ? window.io() : null;
+      var currentRoom = null;
 
-  function renderSnapshot(room){
-    if (!room) return;
+      function pad2(n){ return (n<10?'0':'')+n; }
 
-    // header
-    if (room.code) setText(elCode, room.code);
-    setText(elPlayers, String(room.playerCount ?? room.playersCount ?? 0));
-    setText(elTimer, room.timerText ?? room.countdownText ?? "—");
-
-    // state text
-    setText(elState, room.state ? ("狀態：" + room.state) : "");
-
-    // main
-    const q = room.question;
-    const total = room.totalQuestions ?? room.questionsCount ?? (room.questions ? room.questions.length : undefined);
-    const idx = room.qIndex ?? room.questionIndex ?? room.currentIndex ?? 0;
-
-    if (typeof total === "number"){
-      setText(elProgress, `第 ${idx+1} / ${total} 題`);
-    } else {
-      setText(elProgress, "");
-    }
-
-    if (room.state === "ended"){
-      showWaitingResult();
-    } else if (room.state === "reveal" && q){
-      setText(elQ, q.text || "");
-      // revealCorrectIndex might be on room.correctIndex
-      const ci = (typeof room.correctIndex === "number") ? room.correctIndex : (typeof q.correctIndex === "number" ? q.correctIndex : undefined);
-      renderChoices(q, ci);
-    } else if (q){
-      // lobby / question
-      setText(elQ, q.text || "等待題目…");
-      renderChoices(q, undefined);
-    } else {
-      setText(elQ, "等待題目…");
-      clear(elChoices);
-    }
-
-    renderLeaderboard(room.leaderboard || room.top || []);
-  }
-
-  // ---------- join flow ----------
-  socket.on("connect", ()=>{
-    setText(elState, "已連線");
-    if (!roomCode){
-      setText(elQ, "缺少房間碼（URL 需帶 ?code=XXXXXX）");
-      return;
-    }
-    socket.emit("display:join", { code: roomCode }, (res)=>{
-      if (!res || !res.ok){
-        setText(elQ, "加入房間失敗：" + (res?.error || "unknown"));
-        return;
+      function setTimerFromRoom(){
+        if(!currentRoom){ elTimer.textContent = '—'; return; }
+        if(currentRoom.state !== 'question'){ elTimer.textContent = '—'; return; }
+        if(!currentRoom.startAt || !currentRoom.durationMs){ elTimer.textContent = '—'; return; }
+        var endAt = currentRoom.startAt + currentRoom.durationMs;
+        var ms = endAt - Date.now();
+        if(ms < 0) ms = 0;
+        var s = Math.ceil(ms/1000);
+        // 顯示 11s / 0s 風格
+        elTimer.textContent = s + 's';
       }
-      renderSnapshot(res.room);
-    });
-  });
 
-  socket.on("disconnect", ()=>{
-    setText(elState, "已斷線");
-  });
+      function clearChoices(){
+        while(elChoices.firstChild) elChoices.removeChild(elChoices.firstChild);
+      }
 
-  // server pushes
-  socket.on("room:update", (room)=>{
-    renderSnapshot(room);
-  });
+      function renderChoices(room){
+        clearChoices();
+        if(!room || !room.q){ return; }
+        var choices = room.q.choices || [];
+        for(var i=0;i<choices.length;i++){
+          var div = document.createElement('div');
+          div.className = 'choice';
+          var label = String.fromCharCode(65+i); // A,B,C,D
+          div.textContent = label + ' ' + choices[i];
+          // reveal 顏色
+          if(room.state === 'reveal' && typeof room.q.correctIndex === 'number'){
+            if(i === room.q.correctIndex) div.className += ' ok';
+            else div.className += ' bad';
+          }
+          elChoices.appendChild(div);
+        }
+      }
 
-  socket.on("question:reveal", (p)=>{
-    // p: {code, correctIndex} (and maybe room snapshot)
-    // If server already broadcasted room:update, this is just a backup.
-    if (p && (p.code || roomCode) && typeof p.correctIndex === "number"){
-      // try to add reveal colors on current DOM
-      const nodes = elChoices ? Array.from(elChoices.children) : [];
-      nodes.forEach((node, idx)=>{
-        node.classList.remove("good","bad");
-        if (idx === p.correctIndex) node.classList.add("good");
-        else node.classList.add("bad");
-      });
-    }
-  });
-})();
-</script></body></html>
+      function render(room){
+        currentRoom = room || null;
+
+        // 人數：以 totalPlayers 為主（已加入總人數）
+        if(room && typeof room.totalPlayers === 'number') elPlayers.textContent = room.totalPlayers;
+        else elPlayers.textContent = '0';
+
+        // 排行榜
+        var lb = (room && room.leaderboard) ? room.leaderboard : [];
+        elLB.innerHTML = '';
+        for(var i=0;i<lb.length && i<10;i++){
+          var tr = document.createElement('tr');
+          var td1 = document.createElement('td'); td1.textContent = String(i+1);
+          var td2 = document.createElement('td'); td2.textContent = lb[i].name || '';
+          var td3 = document.createElement('td'); td3.textContent = String(lb[i].score || 0);
+          tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+          elLB.appendChild(tr);
+        }
+
+        // 進度
+        if(room && room.totalQuestions){
+          var idx = (typeof room.qIndex === 'number') ? room.qIndex : 0;
+          elProgress.textContent = '第 ' + idx + ' / ' + room.totalQuestions + ' 題';
+        }else{
+          elProgress.textContent = '第 0 / 0 題';
+        }
+
+        // 題目與顯示規則
+        elRevealText.style.display = 'none';
+        if(!room || !room.state){
+          elQ.textContent = '等待主持人按「開始」開始…';
+          clearChoices();
+          setTimerFromRoom();
+          return;
+        }
+
+        if(room.state === 'lobby'){
+          // 不顯示題目（即使 room.q 有帶也忽略）
+          elQ.textContent = '等待主持人按「開始」開始…';
+          clearChoices();
+        }else if(room.state === 'question'){
+          if(room.q && room.q.text) elQ.textContent = room.q.text;
+          else elQ.textContent = '題目載入中…';
+          renderChoices(room);
+        }else if(room.state === 'reveal'){
+          if(room.q && room.q.text) elQ.textContent = room.q.text;
+          else elQ.textContent = '揭曉中…';
+          elRevealText.style.display = 'block';
+          renderChoices(room); // 含顏色
+        }else if(room.state === 'ended'){
+          // 結束不顯示題目
+          elQ.textContent = '等待結果揭曉';
+          clearChoices();
+        }else{
+          elQ.textContent = '等待主持人按「開始」開始…';
+          clearChoices();
+        }
+
+        setTimerFromRoom();
+      }
+
+      // tick timer frequently for smooth countdown
+      setInterval(function(){
+        setTimerFromRoom();
+      }, 200);
+
+      if(socket){
+        socket.on('connect', function(){
+          if(code) socket.emit('room:watch', { code: code });
+        });
+
+        socket.on('room:update', function(payload){
+          // payload could be {room:...} or room
+          if(payload && payload.room) render(payload.room);
+          else render(payload);
+        });
+
+        socket.on('room:snapshot', function(payload){
+          if(payload && payload.room) render(payload.room);
+          else render(payload);
+        });
+
+        socket.on('room:players', function(payload){
+          // optional: {totalPlayers:n}
+          if(payload && typeof payload.totalPlayers === 'number'){
+            elPlayers.textContent = payload.totalPlayers;
+          }
+        });
+      }
+
+      // initial
+      render(null);
+    })();
+  </script>
+</body>
+</html>
