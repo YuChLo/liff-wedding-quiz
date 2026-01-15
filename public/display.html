@@ -10,12 +10,16 @@ body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:0;background:#050814
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
 .choice{background:#0f1626;border:2px solid #2a3b66;border-radius:18px;padding:16px;font-size:26px;font-weight:800}
 .good{border-color:#22c55e}
+.bad{border-color:#ef4444}
+.picked{border-color:#f59e0b}
 table{width:100%;border-collapse:collapse;font-size:22px}
 th,td{padding:10px;border-bottom:1px solid #223055;text-align:left}
 .avatar{width:38px;height:38px;border-radius:50%;vertical-align:middle;margin-right:10px;object-fit:cover;background:#0f1626;border:1px solid #2a3b66}
 .timer{font-size:44px;font-weight:900}
 .row{display:flex;gap:18px;align-items:flex-start}
 .col{flex:1}
+
+#state{display:none}
 </style></head><body>
 <div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:center">
@@ -42,74 +46,111 @@ th,td{padding:10px;border-bottom:1px solid #223055;text-align:left}
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-const $=id=>document.getElementById(id);
-const params=new URLSearchParams(location.search);
-const roomCode=(params.get("code")||"").toUpperCase();
-$("code").textContent = roomCode || "（加 ?code=房間碼）";
+(function () {
+  function qs(name) { return new URLSearchParams(location.search).get(name) || ""; }
+  var code = (qs("code") || "").toUpperCase();
 
-let state="lobby", startAt=0, durationMs=0, correctIndex=null;
+  var $code = document.getElementById("code");
+  var $timer = document.getElementById("timer");
+  var $progress = document.getElementById("progress");
+  var $q = document.getElementById("q");
+  var $answers = document.getElementById("answers");
+  var $lb = document.getElementById("lb");
 
-const socket=io();
+  if ($code) $code.textContent = code || "----";
 
-function syncJoin(){
-  if(!roomCode) return;
-  // Use ack to get initial snapshot immediately (otherwise display waits for the next broadcast)
-  socket.emit("display:join",{ code: roomCode },(s)=>{
-    if(!s || s.code!==roomCode) return;
-    applySnapshot(s);
-  });
-}
-
-socket.on("connect", ()=>{
-  syncJoin();
-});
-
-// Periodic resync in case display missed events or server restarted
-setInterval(()=>{ if(socket.connected) syncJoin(); }, 2000);
-const applySnapshot = (s)=>{
-  if(s.code!==roomCode) return;
-  state=s.state; startAt=s.startAt||0; durationMs=s.durationMs||0; correctIndex=null;
-  $("answers").textContent=s.answersCount||0;
-  $("progress").textContent = "第 " + (s.qIndex+1) + " / " + s.total + " 題";
-  // Lobby/ended should not show question until host starts
-  const showQuestion = (state==="question" || state==="reveal") && !!s.question;
-
-  if(showQuestion){
-    $("q").textContent=s.question.text;
-    const labels=["A","B","C","D"];
-    $("choices").innerHTML="";
-    s.question.choices.forEach((c,i)=>{
-      const d=document.createElement("div");
-      d.className="choice";
-      d.textContent=labels[i]+"  "+c;
-      $("choices").appendChild(d);
-    });
-  } else if (state==="ended"){
-    $("q").textContent = "等待結果揭曉";
-    $("choices").innerHTML = "";
-  } else {
-    $("q").textContent = "等待主持人按「下一題」開始...";
-    $("choices").innerHTML = "";
+  function setChoiceText(i, label, text) {
+    var el = document.getElementById("c" + i);
+    if (!el) return;
+    el.classList.remove("good", "bad", "picked");
+    el.textContent = label + " " + (text || "");
   }
-  const lb=$("lb"); lb.innerHTML="";
-  (s.players||[]).slice(0,10).forEach((p,i)=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML = "<td>" + (i+1) + "</td><td>" + (p.avatarUrl ? ('<img class="avatar" referrerpolicy="no-referrer" src="' + p.avatarUrl + '"/>') : "") + p.name + "</td><td>" + p.score + "</td>";
-    lb.appendChild(tr);
-  });
-};
 
-socket.on("room:update", applySnapshot);
-socket.on("room:answersCount",(p)=>{$("answers").textContent=p.answersCount||$("answers").textContent;});
-socket.on("question:reveal",(p)=>{
-  correctIndex=p.correctIndex;
-  [...document.querySelectorAll(".choice")].forEach((n,idx)=>{ if(idx===correctIndex) n.classList.add("good"); });
-});
-setInterval(()=>{
-  if(state!=="question"){ $("timer").textContent="—"; return; }
-  const remain=Math.max(0,(startAt+durationMs)-Date.now());
-  $("timer").textContent=Math.ceil(remain/1000)+"s";
-},200);
-</script></body></html>
+  function clearChoices() {
+    for (var i = 0; i < 4; i++) setChoiceText(i, ["A","B","C","D"][i], "");
+  }
+
+  function renderLeaderboard(players) {
+    if (!$lb) return;
+    var rows = "";
+    var list = (players || []).slice().sort(function(a,b){ return (b.score||0)-(a.score||0); }).slice(0,10);
+    for (var i=0;i<list.length;i++){
+      var p=list[i] || {};
+      var name = (p.name || p.playerId || ("P"+(i+1))).toString();
+      name = name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      rows += "<tr><td>"+(i+1)+"</td><td>"+name+"</td><td>"+(p.score||0)+"</td></tr>";
+    }
+    $lb.innerHTML = rows || "<tr><td colspan='3' class='muted'>—</td></tr>";
+  }
+
+  function renderState(s) {
+    s = s || {};
+    var total = (s.totalQuestions != null) ? s.totalQuestions : 5;
+    var idx = (s.currentIndex != null) ? s.currentIndex : 0;
+    var status = s.status || "lobby";
+    var remaining = (s.remaining != null) ? s.remaining : null;
+
+    // ALWAYS show player count immediately
+    var pc = 0;
+    if (Array.isArray(s.players)) pc = s.players.length;
+    else if (typeof s.playerCount === "number") pc = s.playerCount;
+    if ($answers) $answers.textContent = String(pc);
+
+    if ($timer) $timer.textContent = (remaining == null) ? "—" : (String(remaining) + "s");
+    if ($progress) $progress.textContent = "第 " + idx + " / " + total + " 題";
+
+    if (status === "lobby") {
+      if ($q) $q.textContent = "等待主持人按「下一題」開始...";
+      clearChoices();
+      renderLeaderboard(s.players || []);
+      return;
+    }
+
+    if (status === "ended") {
+      if ($q) $q.textContent = "等待結果揭曉";
+      clearChoices();
+      renderLeaderboard(s.players || []);
+      return;
+    }
+
+    // question / reveal
+    if ($q) $q.textContent = (s.question && s.question.text) ? s.question.text : "—";
+    var ch = (s.question && s.question.choices) ? s.question.choices : ["","","",""];
+    for (var i=0;i<4;i++) setChoiceText(i, ["A","B","C","D"][i], ch[i] || "");
+
+    if (status === "reveal" && typeof s.correctIndex === "number") {
+      for (var j=0;j<4;j++){
+        var el = document.getElementById("c"+j);
+        if (!el) continue;
+        el.classList.add(j === s.correctIndex ? "good" : "bad");
+      }
+    }
+
+    renderLeaderboard(s.players || []);
+  }
+
+  if (!code) {
+    renderState({status:"lobby", currentIndex:0, totalQuestions:5, players:[]});
+    return;
+  }
+
+  var socket = io({ transports: ["websocket", "polling"] });
+
+  socket.on("connect", function () {
+    socket.emit("room:watch", { code: code, role: "display" });
+  });
+
+  socket.on("room:snapshot", function (s) { renderState(s); });
+  socket.on("room:update", function (s) { renderState(s); });
+
+  // Keep player count in sync even before host starts (in case some events missed)
+  setInterval(function () {
+    if (socket && socket.connected) socket.emit("room:watch", { code: code, role: "display" });
+  }, 1500);
+})();
+</script>
+
+</body></html>
