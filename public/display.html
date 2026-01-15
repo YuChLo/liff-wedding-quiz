@@ -166,6 +166,11 @@
     applySnapshot(s);
   });
 
+  socket.on("question:reveal", ({ correctIndex }) => {
+    state = "reveal";
+    renderChoices(lastQuestion, correctIndex);
+  });
+
   // keep in sync pre-start (in case events missed)
   setInterval(function(){
     if(!code) return;
