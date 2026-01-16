@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
+import fs from "fs";
 
 const app = express();
 const server = http.createServer(app);
@@ -12,6 +13,7 @@ const BASE_URL = process.env.BASE_URL || "";
 const ADMIN_KEY = process.env.ADMIN_KEY || "change-me";
 const LIFF_ID_PLAYER = process.env.LIFF_ID_PLAYER || "";
 const LIFF_ID_HOST = process.env.LIFF_ID_HOST || "";
+const QUESTIONS_URL = new URL("./questions.json", import.meta.url);
 
 // In-memory rooms (fine for wedding)
 const rooms = new Map();
@@ -27,14 +29,30 @@ function makeCode(len=6){
   return out;
 }
 
-function defaultQuestions(){
-  return [
-    {text:"誰比較會賴床？",choices:["新郎","新娘","都會","都不會"],correctIndex:0},
-    {text:"兩人第一次約會是？",choices:["咖啡廳","餐廳","電影院","公園"],correctIndex:1},
-    {text:"求婚是在？",choices:["家裡","餐廳","戶外景點","旅館"],correctIndex:2},
-    {text:"最常一起做的事？",choices:["追劇","運動","打電動","散步"],correctIndex:0},
-    {text:"婚後家務分工？",choices:["輪流","新郎做","新娘做","掃地機器人"],correctIndex:0},
-  ];
+function normalizeQuestions(qs){
+  if (!Array.isArray(qs) || !qs.length) return [];
+  const clean = [];
+  for (const q of qs){
+    if (!q?.text || !Array.isArray(q?.choices) || q.choices.length !== 4) continue;
+    const ci = Number(q.correctIndex);
+    if (![0,1,2,3].includes(ci)) continue;
+    clean.push({
+      text: String(q.text).slice(0,120),
+      choices: q.choices.map(x=>String(x).slice(0,40)),
+      correctIndex: ci
+    });
+  }
+  return clean;
+}
+
+function loadQuestions(){
+  const raw = fs.readFileSync(QUESTIONS_URL, "utf8");
+  const parsed = JSON.parse(raw);
+  const clean = normalizeQuestions(parsed);
+  if (!clean.length) {
+    throw new Error("Invalid questions.json");
+  }
+  return clean;
 }
 
 function snapshot(room){
@@ -115,6 +133,12 @@ io.on("connection", (socket)=>{
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     let code = makeCode();
     while(rooms.has(code)) code = makeCode();
+    let questions;
+    try{
+      questions = loadQuestions();
+    }catch (err){
+      return cb?.({ok:false,error: String(err?.message || err)});
+    }
     const room = {
       code,
       hostSocket: socket.id,
@@ -122,7 +146,7 @@ io.on("connection", (socket)=>{
       qIndex:0,
       startAt:0,
       durationMs:15000,
-      questions: defaultQuestions(),
+      questions,
       players: new Map(),
       answers: new Map(),
       revealTimer: null
@@ -149,15 +173,7 @@ io.on("connection", (socket)=>{
     const room = rooms.get(code);
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-    const qs = p?.questions;
-    if (!Array.isArray(qs) || !qs.length) return cb?.({ok:false,error:"Invalid questions"});
-    const clean = [];
-    for (const q of qs){
-      if (!q?.text || !Array.isArray(q?.choices) || q.choices.length!==4) continue;
-      const ci = Number(q.correctIndex);
-      if (![0,1,2,3].includes(ci)) continue;
-      clean.push({text:String(q.text).slice(0,120),choices:q.choices.map(x=>String(x).slice(0,40)),correctIndex:ci});
-    }
+    const clean = normalizeQuestions(p?.questions);
     if (!clean.length) return cb?.({ok:false,error:"No valid questions"});
     room.questions = clean;
     room.qIndex = 0;
