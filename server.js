@@ -60,10 +60,43 @@ function broadcast(room){ io.to("room:"+room.code).emit("room:update", snapshot(
 
 app.use(express.static("public", { extensions:["html"] }));
 
+function buildScoreText(room, minScore){
+  const snap = snapshot(room);
+  const players = snap.players.filter(p=>Number(p.score) >= minScore);
+  const lines = [];
+  lines.push(`房間碼: ${snap.code}`);
+  lines.push(`門檻: ${minScore}`);
+  lines.push(`產出時間: ${new Date().toLocaleString()}`);
+  lines.push("");
+  if (!players.length){
+    lines.push("無符合玩家");
+    return lines.join("\n");
+  }
+  players.forEach((p, i)=>{
+    lines.push(`${i+1}. ${p.name || "Guest"} - ${p.score}`);
+  });
+  return lines.join("\n");
+}
+
 app.get("/config", (req,res)=>{
   const role = (req.query.role || "player").toString();
   const liffId = (req.query.liffId || (role==="host"?LIFF_ID_HOST:LIFF_ID_PLAYER)).toString();
   res.json({ role, liffId, baseUrl: BASE_URL });
+});
+
+app.get("/export/score", (req,res)=>{
+  const code = normCode(req.query.code);
+  const adminKey = (req.query.adminKey || "").toString();
+  const minScore = Math.max(0, Number(req.query.minScore || 2000));
+  if (!code) return res.status(400).send("Missing code");
+  if (adminKey !== ADMIN_KEY) return res.status(403).send("ADMIN_KEY invalid");
+  const room = rooms.get(code);
+  if (!room) return res.status(404).send("Room not found");
+  const text = buildScoreText(room, minScore);
+  const filename = `score-${code}-ge${minScore}.txt`;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(text);
 });
 
 io.on("connection", (socket)=>{

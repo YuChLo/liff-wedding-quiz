@@ -68,6 +68,11 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
       <div class="col">
         <div class="big">排行榜（前10）</div>
         <table><thead><tr><th>#</th><th>玩家</th><th>分數</th><th>連線</th></tr></thead><tbody id="lb"></tbody></table>
+        <div class="row" style="margin-top:10px">
+          <button class="secondary" id="exportBtn">匯出≥2000分 TXT</button>
+          <button class="primary" id="shareBtn">LINE 分享名單</button>
+          <div class="muted" id="exportHint" style="flex:1"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -84,6 +89,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
   var baseUrl = "";
   var adminKey = "";
   var liffName = "";
+  var lastSnap = null;
 
   function setConn(ok) { $("conn").textContent = ok ? "已連線" : "未連線"; }
 
@@ -112,7 +118,40 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
     }).catch(function () { done(); });
   }
 
+  function buildScoreText(minScore) {
+    var s = lastSnap;
+    if (!s || !s.players) return "";
+    var players = s.players.filter(function (p) { return Number(p.score) >= minScore; });
+    var lines = [];
+    lines.push("房間碼: " + (s.code || ""));
+    lines.push("門檻: " + minScore);
+    lines.push("產出時間: " + new Date().toLocaleString());
+    lines.push("");
+    if (!players.length) {
+      lines.push("無符合玩家");
+      return lines.join("\n");
+    }
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i];
+      lines.push((i + 1) + ". " + (p.name || "Guest") + " - " + p.score);
+    }
+    return lines.join("\n");
+  }
+
+  function shareTextToLine(text) {
+    if (!window.liff) { alert("請在 LINE 內開啟，才能分享"); return; }
+    if (!liff.isLoggedIn || !liff.isLoggedIn()) { liff.login(); return; }
+    if (!liff.isApiAvailable || !liff.isApiAvailable("shareTargetPicker")) {
+      alert("此 LINE 版本不支援分享");
+      return;
+    }
+    liff.shareTargetPicker([{ type: "text", text: text }]).catch(function () {
+      alert("分享失敗");
+    });
+  }
+
   function update(s) {
+    lastSnap = s;
     roomCode = s.code;
     $("roomCard").style.display = "";
     $("code").textContent = s.code;
@@ -162,6 +201,12 @@ $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
         "<td>" + (p.connected ? "🟢" : "⚪") + "</td>";
       lb.appendChild(tr);
     }
+
+    var hasPlayers = players.length > 0;
+    var exportBtn = $("exportBtn");
+    var shareBtn = $("shareBtn");
+    if (exportBtn) exportBtn.disabled = !hasPlayers;
+    if (shareBtn) shareBtn.disabled = !hasPlayers;
   }
 
   function sampleQs20() {
@@ -224,6 +269,25 @@ $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
       socket.emit("host:next", { adminKey: adminKey, code: roomCode }, function (r) {
         if (!(r && r.ok)) alert((r && r.error) || "失敗");
       });
+    };
+
+    $("exportBtn").onclick = function () {
+      if (!lastSnap) return;
+      var minScore = 2000;
+      if (!adminKey) { alert("請先填 ADMIN_KEY"); return; }
+      var origin = baseUrl || location.origin;
+      var url = origin + "/export/score?code=" + encodeURIComponent(roomCode) +
+        "&adminKey=" + encodeURIComponent(adminKey) + "&minScore=" + encodeURIComponent(minScore);
+      window.open(url, "_blank");
+      var hint = $("exportHint");
+      if (hint) hint.textContent = "已開啟下載連結";
+    };
+
+    $("shareBtn").onclick = function () {
+      if (!lastSnap) return;
+      var minScore = 2000;
+      var text = buildScoreText(minScore);
+      shareTextToLine(text);
     };
   }
 
