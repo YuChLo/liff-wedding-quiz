@@ -118,6 +118,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
     $("code").textContent = s.code;
     $("state").textContent = s.state;
     $("answers").textContent = s.answersCount || 0;
+    $("nextBtn").disabled = (s.state === "ended");
 
     var origin = baseUrl || location.origin;
     $("joinUrl").textContent = origin + "/player.html?code=" + encodeURIComponent(s.code);

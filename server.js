@@ -169,9 +169,15 @@ io.on("connection", (socket)=>{
     const room = rooms.get(code);
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-    room.qIndex += 1;
+    if (!room.questions.length) return cb?.({ok:false,error:"No question"});
+    if (room.state === "ended") return cb?.({ok:false,error:"Already ended"});
+    if (room.qIndex >= room.questions.length - 1) {
+      room.state = "ended";
+    } else {
+      room.qIndex += 1;
+      room.state = "lobby";
+    }
     room.answers.clear();
-    room.state = (room.qIndex >= room.questions.length) ? "ended" : "lobby";
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
   });
