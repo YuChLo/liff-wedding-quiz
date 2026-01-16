@@ -42,12 +42,14 @@ function snapshot(room){
     .map(p=>({userId:p.userId,name:p.name,score:p.score,connected:p.connected}))
     .sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
   const q = room.questions[room.qIndex] || null;
+  const correctIndex = (room.state === "reveal" && q) ? q.correctIndex : null;
   return {
     code: room.code,
     state: room.state,
     qIndex: room.qIndex,
     total: room.questions.length,
     question: q ? {text:q.text,choices:q.choices} : null,
+    correctIndex,
     startAt: room.startAt,
     durationMs: room.durationMs,
     answersCount: room.answers.size,
