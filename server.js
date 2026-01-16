@@ -127,6 +127,7 @@ io.on("connection", (socket)=>{
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     if (!room.questions[room.qIndex]) return cb?.({ok:false,error:"No question"});
+    if (room.state !== "lobby") return cb?.({ok:false,error:"Already started"});
     room.state="question";
     room.durationMs = Math.max(5000, Math.min(60000, Number(p?.durationMs||15000)));
     room.startAt = now();
