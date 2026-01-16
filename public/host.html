@@ -69,8 +69,8 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
         <div class="big">排行榜（前10）</div>
         <table><thead><tr><th>#</th><th>玩家</th><th>分數</th><th>連線</th></tr></thead><tbody id="lb"></tbody></table>
         <div class="row" style="margin-top:10px">
-          <button class="secondary" id="exportBtn">匯出≥2000分 TXT</button>
-          <button class="primary" id="shareBtn">LINE 分享名單</button>
+          <button class="secondary" id="exportBtn">匯出>=2000分 TXT</button>
+          <button class="secondary" id="exportBtn1000">匯出1000~1999分 TXT</button>
           <div class="muted" id="exportHint" style="flex:1"></div>
         </div>
       </div>
@@ -138,18 +138,6 @@ table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px s
     return lines.join("\n");
   }
 
-  function shareTextToLine(text) {
-    if (!window.liff) { alert("請在 LINE 內開啟，才能分享"); return; }
-    if (!liff.isLoggedIn || !liff.isLoggedIn()) { liff.login(); return; }
-    if (!liff.isApiAvailable || !liff.isApiAvailable("shareTargetPicker")) {
-      alert("此 LINE 版本不支援分享");
-      return;
-    }
-    liff.shareTargetPicker([{ type: "text", text: text }]).catch(function () {
-      alert("分享失敗");
-    });
-  }
-
   function update(s) {
     lastSnap = s;
     roomCode = s.code;
@@ -204,9 +192,9 @@ $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
 
     var hasPlayers = players.length > 0;
     var exportBtn = $("exportBtn");
-    var shareBtn = $("shareBtn");
+    var exportBtn1000 = $("exportBtn1000");
     if (exportBtn) exportBtn.disabled = !hasPlayers;
-    if (shareBtn) shareBtn.disabled = !hasPlayers;
+    if (exportBtn1000) exportBtn1000.disabled = !hasPlayers;
   }
 
   function sampleQs20() {
@@ -283,12 +271,21 @@ $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
       if (hint) hint.textContent = "已開啟下載連結";
     };
 
-    $("shareBtn").onclick = function () {
+    $("exportBtn1000").onclick = function () {
       if (!lastSnap) return;
-      var minScore = 2000;
-      var text = buildScoreText(minScore);
-      shareTextToLine(text);
+      var minScore = 1000;
+      var maxScore = 1999;
+      if (!adminKey) { alert("請先填 ADMIN_KEY"); return; }
+      var origin = baseUrl || location.origin;
+      var url = origin + "/export/score?code=" + encodeURIComponent(roomCode) +
+        "&adminKey=" + encodeURIComponent(adminKey) +
+        "&minScore=" + encodeURIComponent(minScore) +
+        "&maxScore=" + encodeURIComponent(maxScore);
+      window.open(url, "_blank");
+      var hint = $("exportHint");
+      if (hint) hint.textContent = "已開啟下載連結";
     };
+
   }
 
   // 啟動流程：先抓 config → init liff → boot socket
@@ -299,3 +296,8 @@ $("progress").textContent = "第 " + (s.qIndex + 1) + " / " + s.total + " 題";
 
 })();
 </script></body></html>
+
+
+
+
+

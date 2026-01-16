@@ -60,12 +60,19 @@ function broadcast(room){ io.to("room:"+room.code).emit("room:update", snapshot(
 
 app.use(express.static("public", { extensions:["html"] }));
 
-function buildScoreText(room, minScore){
+function buildScoreText(room, minScore, maxScore){
   const snap = snapshot(room);
-  const players = snap.players.filter(p=>Number(p.score) >= minScore);
+  const players = snap.players.filter(p=>{
+    const score = Number(p.score);
+    if (Number.isNaN(score)) return false;
+    if (score < minScore) return false;
+    if (Number.isFinite(maxScore) && score > maxScore) return false;
+    return true;
+  });
   const lines = [];
   lines.push(`房間碼: ${snap.code}`);
-  lines.push(`門檻: ${minScore}`);
+  const rangeText = Number.isFinite(maxScore) ? `${minScore}~${maxScore}` : `>=${minScore}`;
+  lines.push(`門檻: ${rangeText}`);
   lines.push(`產出時間: ${new Date().toLocaleString()}`);
   lines.push("");
   if (!players.length){
@@ -88,12 +95,15 @@ app.get("/export/score", (req,res)=>{
   const code = normCode(req.query.code);
   const adminKey = (req.query.adminKey || "").toString();
   const minScore = Math.max(0, Number(req.query.minScore || 2000));
+  const maxScore = (req.query.maxScore === undefined || req.query.maxScore === "") ? Infinity : Number(req.query.maxScore);
   if (!code) return res.status(400).send("Missing code");
   if (adminKey !== ADMIN_KEY) return res.status(403).send("ADMIN_KEY invalid");
   const room = rooms.get(code);
   if (!room) return res.status(404).send("Room not found");
-  const text = buildScoreText(room, minScore);
-  const filename = `score-${code}-ge${minScore}.txt`;
+  const text = buildScoreText(room, minScore, maxScore);
+  const filename = Number.isFinite(maxScore)
+    ? `score-${code}-${minScore}to${maxScore}.txt`
+    : `score-${code}-ge${minScore}.txt`;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(text);
