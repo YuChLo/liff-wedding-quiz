@@ -79,7 +79,8 @@ io.on("connection", (socket)=>{
       durationMs:15000,
       questions: defaultQuestions(),
       players: new Map(),
-      answers: new Map()
+      answers: new Map(),
+      revealTimer: null
     };
     rooms.set(code, room);
     socket.join("room:"+code);
@@ -132,14 +133,21 @@ io.on("connection", (socket)=>{
     room.durationMs = Math.max(5000, Math.min(60000, Number(p?.durationMs||15000)));
     room.startAt = now();
     room.answers.clear();
+    if (room.revealTimer) clearTimeout(room.revealTimer);
     cb?.({ok:true, room: snapshot(room)});
     broadcast(room);
-    setTimeout(()=>reveal(code), room.durationMs + 200);
+    const qIndex = room.qIndex;
+    room.revealTimer = setTimeout(()=>reveal(code, qIndex), room.durationMs + 200);
   });
 
-  function reveal(code){
+  function reveal(code, qIndex){
     const room = rooms.get(code);
     if (!room || room.state!=="question") return;
+    if (typeof qIndex === "number" && qIndex !== room.qIndex) return;
+    if (room.revealTimer) {
+      clearTimeout(room.revealTimer);
+      room.revealTimer = null;
+    }
     const q = room.questions[room.qIndex];
     const correct = q.correctIndex;
     for (const [uid, ans] of room.answers.entries()){
@@ -161,7 +169,7 @@ io.on("connection", (socket)=>{
     const room = rooms.get(code);
     if (!room) return cb?.({ok:false,error:"Room not found"});
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
-    reveal(code);
+    reveal(code, room.qIndex);
     cb?.({ok:true, room: snapshot(room)});
   });
 
@@ -172,6 +180,10 @@ io.on("connection", (socket)=>{
     if (p?.adminKey !== ADMIN_KEY) return cb?.({ok:false,error:"ADMIN_KEY invalid"});
     if (!room.questions.length) return cb?.({ok:false,error:"No question"});
     if (room.state === "ended") return cb?.({ok:false,error:"Already ended"});
+    if (room.revealTimer) {
+      clearTimeout(room.revealTimer);
+      room.revealTimer = null;
+    }
     if (room.qIndex >= room.questions.length - 1) {
       room.state = "ended";
     } else {
